@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// User struct (you'll have more fields from your DB schema)
+// User struct
 type User struct {
 	ID             string    `json:"id" db:"id"` // UUID string from DB
 	Nickname       string    `json:"nickname,omitempty" db:"nickname"`
