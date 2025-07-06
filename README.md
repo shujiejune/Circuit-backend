@@ -1,3 +1,43 @@
+## How To Test
+
+1. Start Docker container
+
+```sh
+make up
+```
+
+2. Apply database migrations
+
+```sh
+make migrate-up
+```
+
+3. Connect to the database
+
+DBeaver, pgAdmin, psql, whatever you like
+
+4. Seed with test data (Optional)
+
+Generate hashed password with script:
+
+```sh
+go run ./misc/hash-password/main.go alice-password
+```
+
+Copy and paste the hashed password from terminal to ./internal/migrations/seed.sql
+
+Seed test data
+
+```sh
+make db-seed
+```
+
+5. Run Go application
+
+```sh
+go run cmd/api/main.go
+```
+
 ## Features Roadmap
 
 Backend
