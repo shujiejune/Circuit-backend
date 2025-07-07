@@ -11,6 +11,7 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
+	@echo "  build          - Build api image before starting"
 	@echo "  up             - Start all services in detached mode"
 	@echo "  down           - Stop and remove all services and volumes"
 	@echo "  stop           - Stop all running services"
@@ -18,6 +19,10 @@ help:
 	@echo "  migrate-up     - Apply all new database migrations"
 	@echo "  migrate-down   - Roll back the last database migration"
 	@echo "  db-seed        - Seed the database with initial test data"
+
+build:
+	@echo "Building Docker images..."
+	docker compose build
 
 up:
 	@echo "Starting Docker containers..."

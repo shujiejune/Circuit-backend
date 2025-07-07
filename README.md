@@ -1,6 +1,16 @@
 ## How To Test
 
-1. Start Docker container
+1. First-time setup
+
+If it's the first time setting up the project, or have changed the Dockerfile or go.mod, run:
+
+```sh
+make build
+```
+
+2. Start all services
+
+Start both the postgreSQL database and Go backend server:
 
 ```sh
 make up
@@ -12,11 +22,7 @@ make up
 make migrate-up
 ```
 
-3. Connect to the database
-
-DBeaver, pgAdmin, psql, whatever you like
-
-4. Seed with test data (Optional)
+3. Seed with test data (Optional)
 
 Generate hashed password with script:
 
@@ -32,10 +38,32 @@ Seed test data
 make db-seed
 ```
 
-5. Run Go application
+4. Check the logs
 
 ```sh
-go run cmd/api/main.go
+make logs
+```
+
+5. Test the API
+
+Now the Go API is listening on http://localhost:8080
+the database is accessible on localhost:5432
+
+(optional) connect to the database with DBeaver/pgAdmin/psql/whatever you like
+(must do) manually test the endpoints through Postman/curl
+
+6. Stop the application
+
+To stop the running Docker container:
+
+```sh
+make stop
+```
+
+To stop the container and delete the database volume:
+
+```sh
+make down
 ```
 
 ## Features Roadmap
