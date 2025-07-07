@@ -4,6 +4,20 @@ package models
 
 import "time"
 
+// MachineType defines the available machine categories.
+const (
+	MachineTypeDrone = "DRONE"
+	MachineTypeRobot = "ROBOT"
+)
+
+// Machine status constants used throughout the application.
+const (
+	StatusIdle        = "IDLE"
+	StatusInTransit   = "IN_TRANSIT"
+	StatusCharging    = "CHARGING"
+	StatusMaintenance = "MAINTENANCE"
+)
+
 // Machine represents a delivery machine such as a drone or ground robot.
 type Machine struct {
 	ID           string    `json:"id"`

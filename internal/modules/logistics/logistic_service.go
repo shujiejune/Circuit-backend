@@ -1,4 +1,3 @@
-// logistics_service.go
 package logistics
 
 import (
@@ -28,6 +27,11 @@ type ServiceInterface interface {
 	ComputeRoute(ctx context.Context, orderID string) (*models.Route, error)
 	ReportTracking(ctx context.Context, orderID string, req models.TrackingEventRequest) error
 	GetTracking(ctx context.Context, orderID string) ([]*models.TrackingEvent, error)
+}
+
+// 为物流服务的依赖注入添加了 AssignServiceInterface，使分配逻辑保持可插入
+type AssignServiceInterface interface {
+	AssignOrder(ctx context.Context, orderID string) (*models.Machine, error)
 }
 
 // service 是 ServiceInterface 的实现，依赖 Repository 和 AssignService。

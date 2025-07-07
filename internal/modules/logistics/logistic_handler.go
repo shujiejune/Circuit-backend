@@ -1,4 +1,3 @@
-// logistics_handler.go
 package logistics
 
 import (
@@ -199,4 +198,9 @@ func (h *Handler) GetTracking(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "failed to get tracking"})
 	}
 	return c.JSON(http.StatusOK, events)
+}
+
+// HandleTracking 目前仅作为占位实现，防止build error for WebSocket path。
+func (h *Handler) HandleTracking(c echo.Context) error {
+	return c.NoContent(http.StatusNotImplemented)
 }

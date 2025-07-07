@@ -2,19 +2,37 @@ package models
 
 import "time"
 
+// Strategy constants for different routing modes.
+const (
+	FastestStrategy  = "FASTEST"
+	CheapestStrategy = "CHEAPEST"
+)
 // RouteRequest is the input from the user to get route options.
 type RouteRequest struct {
-	PickupLocation   string `json:"pickup_location" validate:"required"`
-	DeliveryLocation string `json:"delivery_location" validate:"required"`
+	// When provided, PickupLocation and DeliveryLocation can be omitted and
+	// the service will load addresses from the order record.
+	OrderID          string    `json:"order_id,omitempty"`
+	PickupLocation   string    `json:"pickup_location,omitempty"`
+	DeliveryLocation string    `json:"delivery_location,omitempty"`
+	RequestedTime    time.Time `json:"requested_time,omitempty"`
 }
 
 // RouteOption represents a single routing option with a price and estimated duration.
 type RouteOption struct {
-	ID                string        `json:"id"`
-	PickupLocation    string        `json:"pickup_location"`
-	DeliveryLocation  string        `json:"delivery_location"`
-	Price             float64       `json:"price"`
-	EstimatedDuration time.Duration `json:"estimated_duration"` // in nanoseconds
+	ID               string `json:"id"`
+	PickupLocation   string `json:"pickup_location,omitempty"`
+	DeliveryLocation string `json:"delivery_location,omitempty"`
+	// Additional information returned by the logistics module
+	Polyline        string  `json:"polyline,omitempty"`
+	DistanceMeters  int     `json:"distance_meters,omitempty"`
+	DurationSeconds int     `json:"duration_seconds,omitempty"`
+	Strategy        string  `json:"strategy,omitempty"`
+	MachineType     string  `json:"machine_type,omitempty"`
+	EstimatedCost   float64 `json:"estimated_cost,omitempty"`
+
+	// Legacy pricing fields kept for compatibility with the order module
+	Price             float64       `json:"price,omitempty"`
+	EstimatedDuration time.Duration `json:"estimated_duration,omitempty"`
 } 
 
 // Route represents a persisted route calculated for an order.

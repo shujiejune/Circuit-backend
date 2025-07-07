@@ -67,6 +67,10 @@ func SetupRoutes(
 	}
 
 	// --- Logistics & Tracking Routes ---
+	// Router now registers all logistics routes through the handler’s RegisterRoutes function
+	logisticsGroup := e.Group("", authMiddleware)
+	logisticsHandler.RegisterRoutes(logisticsGroup)
+
 	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware) // Potentially WebSocket
 
 	/* --- Admin Routes ---
