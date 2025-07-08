@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/api
 # Use a minimal 'scratch' or 'alpine' image for the final production image.
 # 'scratch' is an empty image, making it extremely small and secure.
 # 'alpine' is a very small Linux distribution if you need a shell or other tools.
-FROM alpine:latest
+FROM alpine:latest AS production
 
 # Set the working directory.
 WORKDIR /app
