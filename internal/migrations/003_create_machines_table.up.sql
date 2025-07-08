@@ -1,5 +1,3 @@
-CREATE TYPE machine_type AS ENUM ('DRONE', 'ROBOT');
-CREATE TYPE machine_status AS ENUM ('IDLE', 'IN_TRANSIT', 'CHARGING', 'MAINTENANCE');
 CREATE TABLE machines (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type machine_type NOT NULL,

@@ -1,3 +1,6 @@
+# Use the development compose file by default for all commands.
+COMPOSE_FILE = -f docker-compose.dev.yml
+
 # Load environment variables from .env file for use in this Makefile
 # This makes sure DATABASE_URL is available for the migrate commands.
 ifneq (,$(wildcard ./.env))
@@ -11,7 +14,7 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build          - Build api image before starting"
+	@echo "  build          - Build the development Docker images"
 	@echo "  up             - Start all services in detached mode"
 	@echo "  down           - Stop and remove all services and volumes"
 	@echo "  stop           - Stop all running services"
@@ -22,23 +25,23 @@ help:
 
 build:
 	@echo "Building Docker images..."
-	docker compose build
+	docker compose $(COMPOSE_FILE) build
 
 up:
 	@echo "Starting Docker containers..."
-	docker compose up -d
+	docker compose $(COMPOSE_FILE) up -d
 
 down:
 	@echo "Stopping and removing Docker containers and volumes..."
-	docker compose down -v
+	docker compose $(COMPOSE_FILE) down -v
 
 stop:
 	@echo "Stopping Docker containers..."
-	docker compose stop
+	docker compose $(COMPOSE_FILE) stop
 
 logs:
 	@echo "Tailing logs..."
-	docker compose logs -f
+	docker compose $(COMPOSE_FILE) logs -f
 
 migrate-up:
 	@echo "Applying database migrations..."
