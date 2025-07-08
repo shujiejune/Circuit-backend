@@ -15,6 +15,7 @@ import (
 	"dispatch-and-delivery/internal/modules/logistics"
 	"dispatch-and-delivery/internal/modules/orders"
 	"dispatch-and-delivery/internal/modules/users"
+	"dispatch-and-delivery/pkg/payment"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -67,15 +68,18 @@ func main() {
 	userService := users.NewService(userRepo, cfg.JWTSecret)
 	userHandler := users.NewHandler(userService)
 
-	// --- Orders Module ---
-	orderRepo := orders.NewRepository(dbPool)
-	orderService := orders.NewService(orderRepo, cfg.JWTSecret)
-	orderHandler := orders.NewHandler(orderService)
-
 	// --- Logistics Module ---
 	logisticsRepo := logistics.NewRepository(dbPool)
-	logisticsService := logistics.NewService(logisticsRepo, orderService, cfg.JWTSecret)
+	logisticsService := logistics.NewService(logisticsRepo, nil, cfg.JWTSecret) // Temporarily pass nil for orderService
 	logisticsHandler := logistics.NewHandler(logisticsService)
+
+	// --- Payment Service ---
+	paymentService := payment.NewStripeService()
+
+	// --- Orders Module ---
+	orderRepo := orders.NewRepository(dbPool)
+	orderService := orders.NewService(orderRepo, nil, paymentService, logisticsService)
+	orderHandler := orders.NewHandler(orderService, logisticsService)
 
 	// --- Admin Module ---
 	adminRepo := admin.NewRepository(dbPool)

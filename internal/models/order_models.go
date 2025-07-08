@@ -7,18 +7,21 @@ import (
 
 // Order represents a delivery order in the system.
 type Order struct {
-	ID               int             `json:"id"`
-	UserID           string          `json:"user_id"`
-	DroneID          sql.NullInt64   `json:"drone_id,omitempty"`
-	Status           string          `json:"status"`
-	PickupLocation   string          `json:"pickup_location"`
-	DeliveryLocation string          `json:"delivery_location"`
-	Items            []byte          `json:"items"` // Using JSONB
-	PaymentStatus    string          `json:"payment_status"`
-	FeedbackRating   sql.NullInt32   `json:"feedback_rating,omitempty"`
-	FeedbackComment  sql.NullString  `json:"feedback_comment,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID               string         `json:"id"`
+	UserID           string         `json:"user_id"`
+	MachineID        sql.NullString `json:"machine_id,omitempty"`
+	PickupAddressID  string         `json:"pickup_address_id"`
+	DropoffAddressID string         `json:"dropoff_address_id"`
+	PickupAddress    *Address       `json:"pickup_address,omitempty"`
+	DropoffAddress   *Address       `json:"dropoff_address,omitempty"`
+	Status           string         `json:"status"`
+	ItemDescription  string         `json:"item_description"`
+	ItemWeightKg     float64        `json:"item_weight_kg"`
+	Cost             float64        `json:"cost"`
+	FeedbackRating   *int32         `json:"feedback_rating,omitempty"`
+	FeedbackComment  *string        `json:"feedback_comment,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
 // CreateOrderRequest represents the data needed to create a new order from a chosen route option.
@@ -29,8 +32,8 @@ type CreateOrderRequest struct {
 
 // AdminUpdateOrderRequest represents the data an admin can use to update an order.
 type AdminUpdateOrderRequest struct {
-	Status  *string `json:"status,omitempty" validate:"omitempty,oneof=pending processing in_transit delivered cancelled failed"`
-	DroneID *int64  `json:"drone_id,omitempty" validate:"omitempty,gt=0"`
+	Status    *string `json:"status,omitempty" validate:"omitempty,oneof=PENDING_PAYMENT CANCELLED CONFIRMED IN_PROGRESS DELIVERED FAILED"`
+	MachineID *string `json:"machine_id,omitempty"`
 }
 
 // PaymentRequest represents the data needed to pay for an order.

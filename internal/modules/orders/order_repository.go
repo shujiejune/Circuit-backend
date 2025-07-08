@@ -14,14 +14,12 @@ import (
 
 // RepositoryInterface defines the contract for the order repository.
 type RepositoryInterface interface {
-	Create(ctx context.Context, userID string, req models.CreateOrderRequest, pickupLocation, deliveryLocation string) (*models.Order, error)
-	FindByID(ctx context.Context, orderID int) (*models.Order, error)
+	Create(ctx context.Context, userID string, req models.CreateOrderRequest, pickupAddressID, dropoffAddressID string) (*models.Order, error)
+	FindByID(ctx context.Context, orderID string) (*models.Order, error)
 	ListByUserID(ctx context.Context, userID string, page, limit int) ([]*models.Order, int, error)
 	ListAll(ctx context.Context, page, limit int) ([]*models.Order, int, error)
-	Update(ctx context.Context, orderID int, req models.AdminUpdateOrderRequest) (*models.Order, error)
-	UpdateStatusForUser(ctx context.Context, orderID int, userID string, status string) error
-	UpdatePaymentStatus(ctx context.Context, orderID int, paymentStatus string) error
-	AddFeedback(ctx context.Context, orderID int, rating int, comment string) error
+	Update(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error)
+	UpdateStatusForUser(ctx context.Context, orderID string, userID string, status string) error
 }
 
 // Repository implements the RepositoryInterface.
@@ -35,23 +33,29 @@ func NewRepository(db *pgxpool.Pool) RepositoryInterface {
 }
 
 // Create inserts a new order into the database.
-func (r *Repository) Create(ctx context.Context, userID string, req models.CreateOrderRequest, pickupLocation, deliveryLocation string) (*models.Order, error) {
+func (r *Repository) Create(ctx context.Context, userID string, req models.CreateOrderRequest, pickupAddressID, dropoffAddressID string) (*models.Order, error) {
 	query := `
-		INSERT INTO orders (user_id, status, pickup_location, delivery_location, items, payment_status)
-		VALUES ($1, 'pending', $2, $3, $4, 'pending')
-		RETURNING id, user_id, drone_id, status, pickup_location, delivery_location, items, payment_status, feedback_rating, feedback_comment, created_at, updated_at`
+		INSERT INTO orders (user_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost)
+		VALUES ($1, $2, $3, 'PENDING_PAYMENT', $4, $5, $6)
+		RETURNING id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at`
 
-	row := r.db.QueryRow(ctx, query, userID, pickupLocation, deliveryLocation, req.Items)
+	// For now, using default values for weight and cost
+	// In a real implementation, these would come from the route option
+	const defaultWeight = 1.0
+	const defaultCost = 15.75
+
+	row := r.db.QueryRow(ctx, query, userID, pickupAddressID, dropoffAddressID, string(req.Items), defaultWeight, defaultCost)
 	order := &models.Order{}
 	err := row.Scan(
 		&order.ID,
 		&order.UserID,
-		&order.DroneID,
+		&order.MachineID,
+		&order.PickupAddressID,
+		&order.DropoffAddressID,
 		&order.Status,
-		&order.PickupLocation,
-		&order.DeliveryLocation,
-		&order.Items,
-		&order.PaymentStatus,
+		&order.ItemDescription,
+		&order.ItemWeightKg,
+		&order.Cost,
 		&order.FeedbackRating,
 		&order.FeedbackComment,
 		&order.CreatedAt,
@@ -59,7 +63,6 @@ func (r *Repository) Create(ctx context.Context, userID string, req models.Creat
 	)
 
 	if err != nil {
-		// A real implementation should check for foreign key constraints, etc.
 		return nil, fmt.Errorf("repository.CreateOrder: %w", err)
 	}
 
@@ -72,12 +75,13 @@ func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 	err := row.Scan(
 		&order.ID,
 		&order.UserID,
-		&order.DroneID,
+		&order.MachineID,
+		&order.PickupAddressID,
+		&order.DropoffAddressID,
 		&order.Status,
-		&order.PickupLocation,
-		&order.DeliveryLocation,
-		&order.Items,
-		&order.PaymentStatus,
+		&order.ItemDescription,
+		&order.ItemWeightKg,
+		&order.Cost,
 		&order.FeedbackRating,
 		&order.FeedbackComment,
 		&order.CreatedAt,
@@ -92,18 +96,51 @@ func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 	return &order, nil
 }
 
+func (r *Repository) getAddressByID(ctx context.Context, addressID string) (*models.Address, error) {
+	query := `SELECT id, user_id, label, street_address, is_default, created_at, updated_at FROM addresses WHERE id = $1`
+	row := r.db.QueryRow(ctx, query, addressID)
+	var addr models.Address
+	err := row.Scan(
+		&addr.ID,
+		&addr.UserID,
+		&addr.Label,
+		&addr.StreetAddress,
+		&addr.IsDefault,
+		&addr.CreatedAt,
+		&addr.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &addr, nil
+}
+
 // FindByID retrieves a single order by its ID.
-func (r *Repository) FindByID(ctx context.Context, orderID int) (*models.Order, error) {
+func (r *Repository) FindByID(ctx context.Context, orderID string) (*models.Order, error) {
 	query := `
-		SELECT id, user_id, drone_id, status, pickup_location, delivery_location, items, payment_status, feedback_rating, feedback_comment, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		WHERE id = $1`
-	
 	row := r.db.QueryRow(ctx, query, orderID)
 	order, err := r.scanOrder(row)
 	if err != nil {
 		return nil, fmt.Errorf("repository.FindByID: %w", err)
 	}
+
+	if order.PickupAddressID != "" {
+		addr, err := r.getAddressByID(ctx, order.PickupAddressID)
+		if err == nil {
+			order.PickupAddress = addr
+		}
+	}
+	// 查询并赋值 DropoffAddress
+	if order.DropoffAddressID != "" {
+		addr, err := r.getAddressByID(ctx, order.DropoffAddressID)
+		if err == nil {
+			order.DropoffAddress = addr
+		}
+	}
+
 	return order, nil
 }
 
@@ -111,7 +148,7 @@ func (r *Repository) FindByID(ctx context.Context, orderID int) (*models.Order, 
 func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limit int) ([]*models.Order, int, error) {
 	offset := (page - 1) * limit
 	query := `
-		SELECT id, user_id, drone_id, status, pickup_location, delivery_location, items, payment_status, feedback_rating, feedback_comment, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -129,6 +166,18 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 		if err != nil {
 			return nil, 0, fmt.Errorf("repository.ListByUserID.Scan: %w", err)
 		}
+		if order.PickupAddressID != "" {
+			addr, err := r.getAddressByID(ctx, order.PickupAddressID)
+			if err == nil {
+				order.PickupAddress = addr
+			}
+		}
+		if order.DropoffAddressID != "" {
+			addr, err := r.getAddressByID(ctx, order.DropoffAddressID)
+			if err == nil {
+				order.DropoffAddress = addr
+			}
+		}
 		orders = append(orders, order)
 	}
 
@@ -145,7 +194,7 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Order, int, error) {
 	offset := (page - 1) * limit
 	query := `
-		SELECT id, user_id, drone_id, status, pickup_location, delivery_location, items, payment_status, feedback_rating, feedback_comment, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2`
@@ -162,6 +211,18 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 		if err != nil {
 			return nil, 0, fmt.Errorf("repository.ListAll.Scan: %w", err)
 		}
+		if order.PickupAddressID != "" {
+			addr, err := r.getAddressByID(ctx, order.PickupAddressID)
+			if err == nil {
+				order.PickupAddress = addr
+			}
+		}
+		if order.DropoffAddressID != "" {
+			addr, err := r.getAddressByID(ctx, order.DropoffAddressID)
+			if err == nil {
+				order.DropoffAddress = addr
+			}
+		}
 		orders = append(orders, order)
 	}
 
@@ -175,7 +236,7 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 }
 
 // Update modifies an existing order's details (for admin use).
-func (r *Repository) Update(ctx context.Context, orderID int, req models.AdminUpdateOrderRequest) (*models.Order, error) {
+func (r *Repository) Update(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error) {
 	var setClauses []string
 	var args []interface{}
 	argIdx := 1
@@ -185,9 +246,9 @@ func (r *Repository) Update(ctx context.Context, orderID int, req models.AdminUp
 		args = append(args, *req.Status)
 		argIdx++
 	}
-	if req.DroneID != nil {
-		setClauses = append(setClauses, fmt.Sprintf("drone_id = $%d", argIdx))
-		args = append(args, *req.DroneID)
+	if req.MachineID != nil {
+		setClauses = append(setClauses, fmt.Sprintf("machine_id = $%d", argIdx))
+		args = append(args, *req.MachineID)
 		argIdx++
 	}
 
@@ -205,7 +266,7 @@ func (r *Repository) Update(ctx context.Context, orderID int, req models.AdminUp
 	query := fmt.Sprintf(`
 		UPDATE orders SET %s
 		WHERE id = $%d
-		RETURNING id, user_id, drone_id, status, pickup_location, delivery_location, items, payment_status, feedback_rating, feedback_comment, created_at, updated_at`,
+		RETURNING id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at`,
 		strings.Join(setClauses, ", "), argIdx)
 
 	row := r.db.QueryRow(ctx, query, args...)
@@ -222,7 +283,7 @@ func (r *Repository) Update(ctx context.Context, orderID int, req models.AdminUp
 
 // UpdateStatusForUser updates the status of an order for a specific user.
 // This is used for actions like cancelling an order.
-func (r *Repository) UpdateStatusForUser(ctx context.Context, orderID int, userID string, status string) error {
+func (r *Repository) UpdateStatusForUser(ctx context.Context, orderID string, userID string, status string) error {
 	query := `
 		UPDATE orders
 		SET status = $1, updated_at = NOW()
@@ -236,39 +297,5 @@ func (r *Repository) UpdateStatusForUser(ctx context.Context, orderID int, userI
 		return models.ErrNotFound // Order not found or not owned by the user
 	}
 
-	return nil
-}
-
-// UpdatePaymentStatus updates an order's payment status.
-func (r *Repository) UpdatePaymentStatus(ctx context.Context, orderID int, paymentStatus string) error {
-	query := `
-		UPDATE orders
-		SET payment_status = $1, updated_at = NOW()
-		WHERE id = $2`
-
-	cmdTag, err := r.db.Exec(ctx, query, paymentStatus, orderID)
-	if err != nil {
-		return fmt.Errorf("repository.UpdatePaymentStatus: %w", err)
-	}
-	if cmdTag.RowsAffected() == 0 {
-		return models.ErrNotFound
-	}
-	return nil
-}
-
-// AddFeedback adds a rating and comment to an order.
-func (r *Repository) AddFeedback(ctx context.Context, orderID int, rating int, comment string) error {
-	query := `
-		UPDATE orders
-		SET feedback_rating = $1, feedback_comment = $2, updated_at = NOW()
-		WHERE id = $3`
-
-	cmdTag, err := r.db.Exec(ctx, query, rating, comment, orderID)
-	if err != nil {
-		return fmt.Errorf("repository.AddFeedback: %w", err)
-	}
-	if cmdTag.RowsAffected() == 0 {
-		return models.ErrNotFound
-	}
 	return nil
 }

@@ -6,6 +6,21 @@ var (
 	// ErrNotFound is returned when a requested resource is not found.
 	ErrNotFound = errors.New("resource not found")
 
+	// ErrForbidden is returned when access is denied to a resource.
+	ErrForbidden = errors.New("access denied")
+
+	// ErrInvalidToken is returned when a token is invalid or expired.
+	ErrInvalidToken = errors.New("invalid or expired token")
+
+	// ErrConflict is returned when there's a conflict (e.g., duplicate email).
+	ErrConflict = errors.New("resource conflict")
+
+	// ErrInvalidCredentials is returned when login credentials are invalid.
+	ErrInvalidCredentials = errors.New("invalid credentials")
+
+	// ErrNicknameTaken is returned when a nickname is already in use.
+	ErrNicknameTaken = errors.New("nickname is already taken")
+
 	// ErrOrderCannotBeCancelled is returned when an attempt is made to cancel an order
 	// that is no longer in a cancellable state (e.g., 'in_transit' or 'delivered').
 	ErrOrderCannotBeCancelled = errors.New("order cannot be cancelled")
