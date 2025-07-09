@@ -26,7 +26,7 @@ func SetupRoutes(
 
 	// --- Public Routes ---
 	e.GET("/", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"message": "Welcome to Dispatch and Delivery Platform!"})
+		return c.JSON(http.StatusOK, map[string]string{"message": "Welcome to Circuit: Proudly Provides Logistics as a Service!"})
 	})
 
 	authGroup := e.Group("/auth")
@@ -67,21 +67,5 @@ func SetupRoutes(
 	}
 
 	// --- Logistics & Tracking Routes ---
-	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware) // Potentially WebSocket
-
-	/* --- Admin Routes ---
-	adminGroup := e.Group("/admin", authMiddleware, adminRequired)
-	{
-		// Order Management
-		adminGroup.GET("/orders", adminHandler.GetAllOrders)                     // View all orders in the system
-		adminGroup.GET("/orders/:orderId", adminHandler.GetAnyOrder)             // View details of any specific order
-		adminGroup.POST("/orders/:orderId/reassign", adminHandler.ReassignOrder) // Manually reassign a failed delivery
-
-		// Machine Management
-		adminGroup.GET("/fleet", adminHandler.GetAllMachinesWithStatus)           // Get a list of all machines and their status
-		adminGroup.PUT("/fleet/:machineId/status", adminHandler.SetMachineStatus) // e.g., Set to "under_maintenance"
-
-		// User Management
-		adminGroup.GET("/users", adminHandler.GetAllUsers) // View a list of all registered users
-	}*/
+	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware)
 }
