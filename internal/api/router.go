@@ -60,6 +60,7 @@ func SetupRoutes(
 		orderGroup.POST("/quote", orderHandler.GetDeliveryQuote) // Get route options and prices
 		orderGroup.POST("", orderHandler.CreateOrder)
 		orderGroup.GET("", orderHandler.ListMyOrders)
+		orderGroup.GET("", orderHandler.ListAllOrders)
 		orderGroup.GET("/:orderId", orderHandler.GetOrderDetails)
 		orderGroup.PUT("/:orderId/cancel", orderHandler.CancelOrder)
 		orderGroup.POST("/:orderId/pay", orderHandler.ConfirmAndPay)
@@ -67,5 +68,14 @@ func SetupRoutes(
 	}
 
 	// --- Logistics & Tracking Routes ---
-	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware)
+	logisticsGroup := e.Group("/logistics", authMiddleware)
+	{
+		logisticsGroup.GET("/fleet", logisticsHandler.GetFleet)
+		logisticsGroup.PUT("/fleet/:machineId/status", logisticsHandler.SetMachineStatus)
+		logisticsGroup.POST("/orders/quote", logisticsHandler.CalculateQuote)
+		logisticsGroup.POST("/orders/:orderId/route", logisticsHandler.ComputeRoute)
+		logisticsGroup.POST("/orders/:orderId/assign", logisticsHandler.ReassignOrder)
+		logisticsGroup.POST("/orders/:orderId/track", logisticsHandler.ReportTracking)
+		logisticsGroup.GET("orders/:orderId/track", logisticsHandler.GetTracking)
+	}
 }

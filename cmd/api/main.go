@@ -97,15 +97,15 @@ func main() {
 	)
 	userHandler := user.NewHandler(userService)
 
-	// --- Orders Module ---
-	orderRepo := order.NewRepository(dbPool)
-	orderService := order.NewService(orderRepo, cfg.JWTSecret)
-	orderHandler := order.NewHandler(orderService)
-
 	// --- Logistics Module ---
 	logisticsRepo := logistics.NewRepository(dbPool)
-	logisticsService := logistics.NewService(logisticsRepo, orderService, cfg.JWTSecret)
+	logisticsService := logistics.NewService(logisticsRepo, cfg.JWTSecret)
 	logisticsHandler := logistics.NewHandler(logisticsService)
+
+	// --- Orders Module ---
+	orderRepo := order.NewRepository(dbPool)
+	orderService := order.NewService(orderRepo, logisticsService, cfg.JWTSecret)
+	orderHandler := order.NewHandler(orderService)
 
 	// 4. --- Initialize Router ---
 	// Add more routes
