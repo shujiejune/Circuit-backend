@@ -467,7 +467,7 @@ func (s *Service) AddAddress(ctx context.Context, userID, streetAddress string, 
 	}
 
 	// If not default, add it directly
-	return s.userRepo.AddAddress(ctx, userID, label, streetAddress, isDefault)
+	return s.userRepo.AddAddress(ctx, userID, streetAddress, label, isDefault)
 }
 
 func (s *Service) UpdateAddress(ctx context.Context, userID, addressID string, req models.UpdateAddressRequest) (*models.Address, error) {
