@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"database/sql"
 	"dispatch-and-delivery/internal/models"
 	"errors"
 	"fmt"
@@ -35,7 +36,7 @@ type RepositoryInterface interface {
 	ClearDefaultAddress(ctx context.Context, userID string) error
 	VerifyAddressOwner(ctx context.Context, userID, addressID string) error
 	ListAddresses(ctx context.Context, userID string) ([]models.Address, error)
-	AddAddress(ctx context.Context, userID, label, streetAddress string, isDefault bool) (*models.Address, error)
+	AddAddress(ctx context.Context, userID, streetAddress string, label *string, isDefault bool) (*models.Address, error)
 	UpdateAddress(ctx context.Context, addressID string, req models.UpdateAddressRequest) (*models.Address, error)
 	DeleteAddress(ctx context.Context, userID, addressID string) error
 }
@@ -323,8 +324,14 @@ func (r *Repository) ListAddresses(ctx context.Context, userID string) ([]models
 
 	for rows.Next() {
 		var addr models.Address
-		if err := rows.Scan(&addr.ID, &addr.UserID, &addr.Label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt); err != nil {
+		var label sql.NullString
+		if err := rows.Scan(&addr.ID, &addr.UserID, &label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("repository.ListAddresses.Scan: %w", err)
+		}
+		if label.Valid {
+			addr.Label = &label.String
+		} else {
+			addr.Label = nil
 		}
 		addresses = append(addresses, addr)
 	}
@@ -333,17 +340,23 @@ func (r *Repository) ListAddresses(ctx context.Context, userID string) ([]models
 }
 
 // AddAddress creates a new address record. It will run within a transaction if the repository was created using WithTx().
-func (r *Repository) AddAddress(ctx context.Context, userID, label, streetAddress string, isDefault bool) (*models.Address, error) {
+func (r *Repository) AddAddress(ctx context.Context, userID, streetAddress string, label *string, isDefault bool) (*models.Address, error) {
 	query := `
         INSERT INTO addresses (user_id, label, street_address, is_default)
         VALUES ($1, $2, $3, $4)
         RETURNING id, user_id, label, street_address, is_default, created_at, updated_at;
 	`
 	var addr models.Address
+	var labelFromDB sql.NullString
 	row := r.executor.QueryRow(ctx, query, userID, label, streetAddress, isDefault)
-	err := row.Scan(&addr.ID, &addr.UserID, &addr.Label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
+	err := row.Scan(&addr.ID, &addr.UserID, &labelFromDB, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if labelFromDB.Valid {
+		addr.Label = &labelFromDB.String
+	} else {
+		addr.Label = nil
 	}
 	return &addr, nil
 }
@@ -354,9 +367,9 @@ func (r *Repository) UpdateAddress(ctx context.Context, addressID string, req mo
 	argCount := 1
 
 	// Dynamically build the SET part of the query based on which fields are provided.
-	if req.Label != "" {
+	if req.Label != nil {
 		setClauses = append(setClauses, fmt.Sprintf("label = $%d", argCount))
-		args = append(args, req.Label)
+		args = append(args, *req.Label)
 		argCount++
 	}
 	if req.StreetAddress != "" {
@@ -390,14 +403,20 @@ func (r *Repository) UpdateAddress(ctx context.Context, addressID string, req mo
 	`, strings.Join(setClauses, ", "), argCount)
 
 	var addr models.Address
+	var label sql.NullString
 	row := r.executor.QueryRow(ctx, query, args...)
-	err := row.Scan(&addr.ID, &addr.UserID, &addr.Label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
+	err := row.Scan(&addr.ID, &addr.UserID, &label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, models.ErrNotFound
 		}
 		return nil, fmt.Errorf("repository.UpdateAddress: %w", err)
+	}
+	if label.Valid {
+		addr.Label = &label.String
+	} else {
+		addr.Label = nil
 	}
 
 	return &addr, nil
