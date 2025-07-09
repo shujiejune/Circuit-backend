@@ -308,6 +308,23 @@ func (r *Repository) VerifyAddressOwner(ctx context.Context, userID, addressID s
 	return nil
 }
 
+func (r *Repository) scanAddress(row pgx.Row) (*models.Address, error) {
+	var addr models.Address
+	var label sql.NullString
+
+	err := row.Scan(&addr.ID, &addr.UserID, &label, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("repository.scanAddress: %w", err)
+	}
+	if label.Valid {
+		addr.Label = &label.String
+	} else {
+		addr.Label = nil
+	}
+
+	return &addr, nil
+}
+
 func (r *Repository) ListAddresses(ctx context.Context, userID string) ([]models.Address, error) {
 	var addresses []models.Address
 
@@ -346,24 +363,18 @@ func (r *Repository) AddAddress(ctx context.Context, userID, streetAddress strin
         VALUES ($1, $2, $3, $4)
         RETURNING id, user_id, label, street_address, is_default, created_at, updated_at;
 	`
-	var addr models.Address
-	var labelFromDB sql.NullString
 	row := r.executor.QueryRow(ctx, query, userID, label, streetAddress, isDefault)
-	err := row.Scan(&addr.ID, &addr.UserID, &labelFromDB, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
+	addr, err := r.scanAddress(row)
 	if err != nil {
 		return nil, err
 	}
-	if labelFromDB.Valid {
-		addr.Label = &labelFromDB.String
-	} else {
-		addr.Label = nil
-	}
-	return &addr, nil
+
+	return addr, nil
 }
 
 func (r *Repository) UpdateAddress(ctx context.Context, addressID string, req models.UpdateAddressRequest) (*models.Address, error) {
 	var setClauses []string
-	var args []interface{}
+	var args []any
 	argCount := 1
 
 	// Dynamically build the SET part of the query based on which fields are provided.
@@ -402,24 +413,17 @@ func (r *Repository) UpdateAddress(ctx context.Context, addressID string, req mo
         RETURNING id, user_id, label, street_address, is_default, created_at, updated_at;
 	`, strings.Join(setClauses, ", "), argCount)
 
-	var addr models.Address
-	var label sql.NullString
 	row := r.executor.QueryRow(ctx, query, args...)
-	err := row.Scan(&addr.ID, &addr.UserID, &label, &addr.StreetAddress, &addr.IsDefault, &addr.CreatedAt, &addr.UpdatedAt)
+	addr, err := r.scanAddress(row)
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, models.ErrNotFound
 		}
-		return nil, fmt.Errorf("repository.UpdateAddress: %w", err)
-	}
-	if label.Valid {
-		addr.Label = &label.String
-	} else {
-		addr.Label = nil
+		return nil, err
 	}
 
-	return &addr, nil
+	return addr, nil
 }
 
 func (r *Repository) DeleteAddress(ctx context.Context, userID, addressID string) error {
