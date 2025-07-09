@@ -11,8 +11,8 @@ import (
 
 	"dispatch-and-delivery/internal/api"
 	"dispatch-and-delivery/internal/config"
-	//"dispatch-and-delivery/internal/modules/logistics"
-	//"dispatch-and-delivery/internal/modules/order"
+	"dispatch-and-delivery/internal/modules/logistics"
+	"dispatch-and-delivery/internal/modules/order"
 	"dispatch-and-delivery/internal/modules/user"
 	"dispatch-and-delivery/pkg/email"
 
@@ -96,23 +96,23 @@ func main() {
 		googleOAuthConfig,
 	)
 	userHandler := user.NewHandler(userService)
-	/*
-		// --- Orders Module ---
-		orderRepo := order.NewRepository(dbPool)
-		orderService := order.NewService(orderRepo, cfg.JWTSecret)
-		orderHandler := order.NewHandler(orderService)
 
-		// --- Logistics Module ---
-		logisticsRepo := logistics.NewRepository(dbPool)
-		logisticsService := logistics.NewService(logisticsRepo, orderService, cfg.JWTSecret)
-		logisticsHandler := logistics.NewHandler(logisticsService)
-	*/
+	// --- Orders Module ---
+	orderRepo := order.NewRepository(dbPool)
+	orderService := order.NewService(orderRepo, cfg.JWTSecret)
+	orderHandler := order.NewHandler(orderService)
+
+	// --- Logistics Module ---
+	logisticsRepo := logistics.NewRepository(dbPool)
+	logisticsService := logistics.NewService(logisticsRepo, orderService, cfg.JWTSecret)
+	logisticsHandler := logistics.NewHandler(logisticsService)
+
 	// 4. --- Initialize Router ---
 	// Add more routes
 	api.SetupRoutes(e, cfg.JWTSecret,
 		userHandler,
-		//orderHandler,
-		//logisticsHandler,
+		orderHandler,
+		logisticsHandler,
 	)
 
 	// 5. --- Start Server with graceful shutdown logic ---
