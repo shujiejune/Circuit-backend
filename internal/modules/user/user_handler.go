@@ -313,7 +313,7 @@ func (h *Handler) AddAddress(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	newAddress, err := h.service.AddAddress(ctx, userID, req.Label, req.StreetAddress, req.IsDefault)
+	newAddress, err := h.service.AddAddress(ctx, userID, req.StreetAddress, req.Label, req.IsDefault)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: err.Error()})
 	}

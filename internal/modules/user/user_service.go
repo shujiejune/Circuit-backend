@@ -35,7 +35,7 @@ type ServiceInterface interface {
 	UpdateUserProfile(ctx context.Context, userID string, data models.UserUpdateData) (*models.User, error)
 
 	ListAddresses(ctx context.Context, userID string) ([]models.Address, error)
-	AddAddress(ctx context.Context, userID, label, streetAddress string, isDefault bool) (*models.Address, error)
+	AddAddress(ctx context.Context, userID, streetAddress string, label *string, isDefault bool) (*models.Address, error)
 	UpdateAddress(ctx context.Context, userID, addressID string, req models.UpdateAddressRequest) (*models.Address, error)
 	DeleteAddress(ctx context.Context, userID, addressID string) error
 }
@@ -433,7 +433,7 @@ func (s *Service) ListAddresses(ctx context.Context, userID string) ([]models.Ad
 	return allAddresses, nil
 }
 
-func (s *Service) AddAddress(ctx context.Context, userID, label, streetAddress string, isDefault bool) (*models.Address, error) {
+func (s *Service) AddAddress(ctx context.Context, userID, streetAddress string, label *string, isDefault bool) (*models.Address, error) {
 	// If this new address is being set as the default, unset the current default.
 	if isDefault {
 		// This entire block should be executed in a single database transaction.
@@ -455,7 +455,7 @@ func (s *Service) AddAddress(ctx context.Context, userID, label, streetAddress s
 		}
 
 		// Create the new address within the same transaction.
-		newAddress, err := txRepo.AddAddress(ctx, userID, label, streetAddress, isDefault)
+		newAddress, err := txRepo.AddAddress(ctx, userID, streetAddress, label, isDefault)
 		if err != nil {
 			return nil, err
 		}
@@ -467,7 +467,7 @@ func (s *Service) AddAddress(ctx context.Context, userID, label, streetAddress s
 	}
 
 	// If not default, add it directly
-	return s.userRepo.AddAddress(ctx, userID, label, streetAddress, isDefault)
+	return s.userRepo.AddAddress(ctx, userID, streetAddress, label, isDefault)
 }
 
 func (s *Service) UpdateAddress(ctx context.Context, userID, addressID string, req models.UpdateAddressRequest) (*models.Address, error) {
