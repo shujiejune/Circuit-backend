@@ -2,11 +2,10 @@ package order
 
 import (
 	"context"
+	"database/sql"
 	"dispatch-and-delivery/internal/models"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,8 +17,8 @@ type RepositoryInterface interface {
 	FindByID(ctx context.Context, orderID string) (*models.Order, error)
 	ListByUserID(ctx context.Context, userID string, page, limit int) ([]*models.Order, int, error)
 	ListAll(ctx context.Context, page, limit int) ([]*models.Order, int, error)
-	Update(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error)
 	UpdateStatusForUser(ctx context.Context, orderID string, userID string, status string) error
+	InsertAddress(ctx context.Context, addr *models.Address) (string, error)
 }
 
 // Repository implements the RepositoryInterface.
@@ -35,55 +34,39 @@ func NewRepository(db *pgxpool.Pool) RepositoryInterface {
 // Create inserts a new order into the database.
 func (r *Repository) Create(ctx context.Context, userID string, req models.CreateOrderRequest, pickupAddressID, dropoffAddressID string) (*models.Order, error) {
 	query := `
-		INSERT INTO orders (user_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost)
-		VALUES ($1, $2, $3, 'PENDING_PAYMENT', $4, $5, $6)
-		RETURNING id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at`
+		INSERT INTO orders (user_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost)
+		VALUES ($1, $2, $3, 'PENDING_PAYMENT', $4, $5, $6, $7, $8)
+		RETURNING id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost, created_at, updated_at`
 
 	// For now, using default values for weight and cost
 	// In a real implementation, these would come from the route option
 	const defaultWeight = 1.0
 	const defaultCost = 15.75
 
-	row := r.db.QueryRow(ctx, query, userID, pickupAddressID, dropoffAddressID, string(req.Items), defaultWeight, defaultCost)
-	order := &models.Order{}
-	err := row.Scan(
-		&order.ID,
-		&order.UserID,
-		&order.MachineID,
-		&order.PickupAddressID,
-		&order.DropoffAddressID,
-		&order.Status,
-		&order.ItemDescription,
-		&order.ItemWeightKg,
-		&order.Cost,
-		&order.FeedbackRating,
-		&order.FeedbackComment,
-		&order.CreatedAt,
-		&order.UpdatedAt,
-	)
-
+	row := r.db.QueryRow(ctx, query, userID, pickupAddressID, dropoffAddressID, req.ItemLengthCm, req.ItemWidthCm, req.ItemHeightCm, defaultWeight, defaultCost)
+	order, err := r.scanOrder(row)
 	if err != nil {
 		return nil, fmt.Errorf("repository.CreateOrder: %w", err)
 	}
-
 	return order, nil
 }
 
 // scanOrder is a helper function to scan a row into an Order model.
 func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 	var order models.Order
+	var machineIDFromDB sql.NullString
 	err := row.Scan(
 		&order.ID,
 		&order.UserID,
-		&order.MachineID,
+		&machineIDFromDB,
 		&order.PickupAddressID,
 		&order.DropoffAddressID,
 		&order.Status,
-		&order.ItemDescription,
+		&order.ItemLengthCm,
+		&order.ItemWidthCm,
+		&order.ItemHeightCm,
 		&order.ItemWeightKg,
 		&order.Cost,
-		&order.FeedbackRating,
-		&order.FeedbackComment,
 		&order.CreatedAt,
 		&order.UpdatedAt,
 	)
@@ -93,7 +76,35 @@ func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 		}
 		return nil, fmt.Errorf("failed to scan order: %w", err)
 	}
+
+	if machineIDFromDB.Valid {
+		order.MachineID = &machineIDFromDB.String
+	} else {
+		order.MachineID = nil
+	}
+
+	// Fetch feedback for this order
+	feedback, err := r.getFeedbackByOrderID(context.Background(), order.ID)
+	if err == nil {
+		order.Feedback = feedback
+	}
+	// If feedback not found, just leave as nil
+
 	return &order, nil
+}
+
+// getFeedbackByOrderID fetches feedback for a given order ID
+func (r *Repository) getFeedbackByOrderID(ctx context.Context, orderID string) (*models.Feedback, error) {
+	query := `SELECT id, order_id, rating, comment, created_at, updated_at FROM feedback WHERE order_id = $1`
+	row := r.db.QueryRow(ctx, query, orderID)
+	var fb models.Feedback
+	if err := row.Scan(&fb.ID, &fb.OrderID, &fb.Rating, &fb.Comment, &fb.CreatedAt, &fb.UpdatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No feedback for this order
+		}
+		return nil, err
+	}
+	return &fb, nil
 }
 
 func (r *Repository) getAddressByID(ctx context.Context, addressID string) (*models.Address, error) {
@@ -115,10 +126,21 @@ func (r *Repository) getAddressByID(ctx context.Context, addressID string) (*mod
 	return &addr, nil
 }
 
+// InsertAddress inserts a new address into the database and returns its ID.
+func (r *Repository) InsertAddress(ctx context.Context, addr *models.Address) (string, error) {
+	query := `INSERT INTO addresses (user_id, label, street_address, is_default) VALUES ($1, $2, $3, $4) RETURNING id`
+	var id string
+	err := r.db.QueryRow(ctx, query, addr.UserID, addr.Label, addr.StreetAddress, addr.IsDefault).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("repository.InsertAddress: %w", err)
+	}
+	return id, nil
+}
+
 // FindByID retrieves a single order by its ID.
 func (r *Repository) FindByID(ctx context.Context, orderID string) (*models.Order, error) {
 	query := `
-		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		WHERE id = $1`
 	row := r.db.QueryRow(ctx, query, orderID)
@@ -148,7 +170,7 @@ func (r *Repository) FindByID(ctx context.Context, orderID string) (*models.Orde
 func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limit int) ([]*models.Order, int, error) {
 	offset := (page - 1) * limit
 	query := `
-		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -164,19 +186,7 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 	for rows.Next() {
 		order, err := r.scanOrder(rows)
 		if err != nil {
-			return nil, 0, fmt.Errorf("repository.ListByUserID.Scan: %w", err)
-		}
-		if order.PickupAddressID != "" {
-			addr, err := r.getAddressByID(ctx, order.PickupAddressID)
-			if err == nil {
-				order.PickupAddress = addr
-			}
-		}
-		if order.DropoffAddressID != "" {
-			addr, err := r.getAddressByID(ctx, order.DropoffAddressID)
-			if err == nil {
-				order.DropoffAddress = addr
-			}
+			return nil, 0, fmt.Errorf("repository.ListByUserID.scanOrder: %w", err)
 		}
 		orders = append(orders, order)
 	}
@@ -194,7 +204,7 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Order, int, error) {
 	offset := (page - 1) * limit
 	query := `
-		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at
+		SELECT id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost, created_at, updated_at
 		FROM orders
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2`
@@ -209,19 +219,7 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 	for rows.Next() {
 		order, err := r.scanOrder(rows)
 		if err != nil {
-			return nil, 0, fmt.Errorf("repository.ListAll.Scan: %w", err)
-		}
-		if order.PickupAddressID != "" {
-			addr, err := r.getAddressByID(ctx, order.PickupAddressID)
-			if err == nil {
-				order.PickupAddress = addr
-			}
-		}
-		if order.DropoffAddressID != "" {
-			addr, err := r.getAddressByID(ctx, order.DropoffAddressID)
-			if err == nil {
-				order.DropoffAddress = addr
-			}
+			return nil, 0, fmt.Errorf("repository.ListAll.scanOrder: %w", err)
 		}
 		orders = append(orders, order)
 	}
@@ -233,52 +231,6 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 	}
 
 	return orders, total, nil
-}
-
-// Update modifies an existing order's details (for admin use).
-func (r *Repository) Update(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error) {
-	var setClauses []string
-	var args []interface{}
-	argIdx := 1
-
-	if req.Status != nil {
-		setClauses = append(setClauses, fmt.Sprintf("status = $%d", argIdx))
-		args = append(args, *req.Status)
-		argIdx++
-	}
-	if req.MachineID != nil {
-		setClauses = append(setClauses, fmt.Sprintf("machine_id = $%d", argIdx))
-		args = append(args, *req.MachineID)
-		argIdx++
-	}
-
-	if len(setClauses) == 0 {
-		// No fields to update, return the current order data
-		return r.FindByID(ctx, orderID)
-	}
-
-	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
-	args = append(args, time.Now())
-	argIdx++
-
-	args = append(args, orderID) // For the WHERE clause
-
-	query := fmt.Sprintf(`
-		UPDATE orders SET %s
-		WHERE id = $%d
-		RETURNING id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost, created_at, updated_at`,
-		strings.Join(setClauses, ", "), argIdx)
-
-	row := r.db.QueryRow(ctx, query, args...)
-	order, err := r.scanOrder(row)
-	if err != nil {
-		if errors.Is(err, models.ErrNotFound) {
-			return nil, models.ErrNotFound
-		}
-		return nil, fmt.Errorf("repository.Update: %w", err)
-	}
-
-	return order, nil
 }
 
 // UpdateStatusForUser updates the status of an order for a specific user.

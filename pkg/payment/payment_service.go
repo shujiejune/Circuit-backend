@@ -3,6 +3,9 @@ package payment
 import (
 	"context"
 	"fmt"
+
+	"github.com/stripe/stripe-go/v74"
+	"github.com/stripe/stripe-go/v74/paymentintent"
 )
 
 // ServiceInterface defines the contract for a payment processing service.
@@ -10,23 +13,27 @@ type ServiceInterface interface {
 	ProcessPayment(ctx context.Context, userID string, amount float64, paymentMethodID string) (string, error)
 }
 
-// StripeService is a mock implementation using Stripe (replace with real SDK calls in production).
+// StripeService is a real implementation using Stripe.
 type StripeService struct {
-	// Add Stripe client/config fields here if needed
+	apiKey string
 }
 
-func NewStripeService() *StripeService {
-	return &StripeService{}
+func NewStripeService(apiKey string) *StripeService {
+	stripe.Key = apiKey
+	return &StripeService{apiKey: apiKey}
 }
 
-// ProcessPayment simulates a payment via Stripe.
+// ProcessPayment creates and confirms a Stripe PaymentIntent.
 func (s *StripeService) ProcessPayment(ctx context.Context, userID string, amount float64, paymentMethodID string) (string, error) {
-	// Here you would call the real Stripe SDK, e.g.:
-	// charge, err := stripeClient.Charges.New(...)
-	// For now, just simulate success
-	if amount <= 0 {
-		return "", fmt.Errorf("invalid payment amount")
+	params := &stripe.PaymentIntentParams{
+		Amount:        stripe.Int64(int64(amount * 100)), // Stripe uses cents
+		Currency:      stripe.String(string(stripe.CurrencyUSD)),
+		PaymentMethod: stripe.String(paymentMethodID),
+		Confirm:       stripe.Bool(true),
 	}
-	// Simulate a payment ID
-	return "stripe_payment_id_123", nil
+	pi, err := paymentintent.New(params)
+	if err != nil {
+		return "", fmt.Errorf("stripe payment failed: %w", err)
+	}
+	return pi.ID, nil
 } 

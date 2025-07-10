@@ -11,10 +11,10 @@ import (
 
 	"dispatch-and-delivery/internal/api"
 	"dispatch-and-delivery/internal/config"
-	"dispatch-and-delivery/internal/modules/admin"
-	"dispatch-and-delivery/internal/modules/logistics"
-	"dispatch-and-delivery/internal/modules/orders"
-	"dispatch-and-delivery/internal/modules/users"
+	admin "dispatch-and-delivery/internal/modules/admin"
+	logistics "dispatch-and-delivery/internal/modules/logistics"
+	order "dispatch-and-delivery/internal/modules/order"
+	users "dispatch-and-delivery/internal/modules/users"
 	"dispatch-and-delivery/pkg/payment"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,12 +74,12 @@ func main() {
 	logisticsHandler := logistics.NewHandler(logisticsService)
 
 	// --- Payment Service ---
-	paymentService := payment.NewStripeService()
+	stripeService := payment.NewStripeService(cfg.StripeAPIKey)
 
-	// --- Orders Module ---
-	orderRepo := orders.NewRepository(dbPool)
-	orderService := orders.NewService(orderRepo, nil, paymentService, logisticsService)
-	orderHandler := orders.NewHandler(orderService, logisticsService)
+	// --- Order Module ---
+	orderRepo := order.NewRepository(dbPool)
+	orderService := order.NewService(orderRepo, stripeService, logisticsService)
+	orderHandler := order.NewHandler(orderService, logisticsService)
 
 	// --- Admin Module ---
 	adminRepo := admin.NewRepository(dbPool)

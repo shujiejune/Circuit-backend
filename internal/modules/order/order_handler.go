@@ -1,7 +1,6 @@
 package order
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -10,12 +9,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
 )
-
-// LogisticsServiceInterface defines the contract for the logistics service.
-type LogisticsServiceInterface interface {
-	CalculateRouteOptions(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error)
-	AssignDelivery(ctx context.Context, order *models.Order) error
-}
 
 // Handler handles HTTP requests for orders.
 type Handler struct {
@@ -43,7 +36,7 @@ func (h *Handler) GetDeliveryQuote(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, models.ErrorResponse{Message: "Validation failed: " + err.Error()})
 	}
 
-	options, err := h.logisticsService.CalculateRouteOptions(c.Request().Context(), req)
+	options, err := h.svc.GetDeliveryQuote(c.Request().Context(), req)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "Failed to get delivery quotes"})
 	}
@@ -217,28 +210,4 @@ func (h *Handler) ListAllOrders(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "Failed to list all orders"})
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"orders": orders, "total": total})
-}
-
-func (h *Handler) AdminUpdateOrder(c echo.Context) error {
-	// Role check is done in middleware
-	orderID := c.Param("orderId")
-
-	var req models.AdminUpdateOrderRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, models.ErrorResponse{Message: "Invalid request body"})
-	}
-	if err := h.validate.Struct(req); err != nil {
-		return c.JSON(http.StatusBadRequest, models.ErrorResponse{Message: "Validation failed: " + err.Error()})
-	}
-
-	order, err := h.svc.AdminUpdateOrder(c.Request().Context(), orderID, req)
-	if err != nil {
-		if err == models.ErrNotFound {
-			return c.JSON(http.StatusNotFound, models.ErrorResponse{Message: "Order not found"})
-		}
-		c.Logger().Error("Handler.AdminUpdateOrder: ", err)
-		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "Failed to update order"})
-	}
-
-	return c.JSON(http.StatusOK, order)
 }

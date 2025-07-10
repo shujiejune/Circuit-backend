@@ -4,9 +4,8 @@ import (
 	"net/http"
 
 	"dispatch-and-delivery/internal/api/middleware"
-	"dispatch-and-delivery/internal/modules/admin"
 	"dispatch-and-delivery/internal/modules/logistics"
-	"dispatch-and-delivery/internal/modules/orders"
+	"dispatch-and-delivery/internal/modules/order"
 	"dispatch-and-delivery/internal/modules/users"
 
 	"github.com/labstack/echo/v4"
@@ -16,9 +15,8 @@ import (
 func SetupRoutes(
 	e *echo.Echo,
 	userHandler *users.Handler,
-	orderHandler *orders.Handler,
+	orderHandler *order.Handler,
 	logisticsHandler *logistics.Handler,
-	adminHandler *admin.Handler,
 	jwtSecret string,
 ) {
 	// Initialize the JWT authentication middleware
@@ -65,20 +63,4 @@ func SetupRoutes(
 
 	// --- Logistics & Tracking Routes ---
 	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware) // Potentially WebSocket
-
-	// --- Admin Routes ---
-	adminGroup := e.Group("/admin", authMiddleware, adminRequired)
-	{
-		// Order Management
-		adminGroup.GET("/orders", adminHandler.GetAllOrders)                     // View all orders in the system
-		adminGroup.GET("/orders/:orderId", adminHandler.GetAnyOrder)             // View details of any specific order
-		adminGroup.POST("/orders/:orderId/reassign", adminHandler.ReassignOrder) // Manually reassign a failed delivery
-
-		// Machine Management
-		adminGroup.GET("/fleet", adminHandler.GetAllMachinesWithStatus)           // Get a list of all machines and their status
-		adminGroup.PUT("/fleet/:machineId/status", adminHandler.SetMachineStatus) // e.g., Set to "under_maintenance"
-
-		// User Management
-		adminGroup.GET("/users", adminHandler.GetAllUsers) // View a list of all registered users
-	}
 }

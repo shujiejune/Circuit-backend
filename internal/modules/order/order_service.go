@@ -8,24 +8,22 @@ import (
 	"sync"
 )
 
-// MapsServiceInterface defines the contract for an external mapping service
-// like Google Maps API, used to get route and time estimations.
-// This would be implemented in a separate package, e.g., `pkg/maps`.
-type MapsServiceInterface interface {
-	GetDirections(ctx context.Context, origin, destination string) ([]*models.RouteOption, error)
+// LogisticsServiceInterface defines the contract for the logistics service.
+type LogisticsServiceInterface interface {
+	CalculateRouteOptions(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error)
+	AssignOrder(ctx context.Context, orderID, machineID string) (*models.Machine, error)
 }
 
 // ServiceInterface defines the contract for the order service.
 type ServiceInterface interface {
-	// Remove GetRouteOptions from the interface
 	CreateOrder(ctx context.Context, userID string, req models.CreateOrderRequest) (*models.Order, error)
 	GetOrderDetails(ctx context.Context, orderID string, userID string, role string) (*models.Order, error)
 	ListUserOrders(ctx context.Context, userID string, page, limit int) ([]*models.Order, int, error)
 	ListAllOrders(ctx context.Context, page, limit int) ([]*models.Order, int, error)
-	AdminUpdateOrder(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error)
 	CancelOrder(ctx context.Context, orderID string, userID string) error
 	ConfirmAndPay(ctx context.Context, userID string, orderID string, req models.PaymentRequest) (*models.Order, error)
 	SubmitFeedback(ctx context.Context, userID string, orderID string, req models.FeedbackRequest) error
+	GetDeliveryQuote(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error)
 }
 
 // PaymentServiceInterface defines the contract for a payment processing service.
@@ -37,7 +35,7 @@ type PaymentServiceInterface interface {
 // Service implements the order service logic.
 type Service struct {
 	repo           RepositoryInterface
-	mapsService    MapsServiceInterface // For interacting with an external maps API.
+	// mapsService    MapsServiceInterface // For interacting with an external maps API. (remove)
 	routeCache     map[string]*models.RouteOption // In-memory cache for route options
 	routeCacheLock sync.RWMutex
 	paymentService PaymentServiceInterface
@@ -45,10 +43,10 @@ type Service struct {
 }
 
 // NewService creates a new order service.
-func NewService(repo RepositoryInterface, mapsService MapsServiceInterface, paymentService PaymentServiceInterface, logisticsService LogisticsServiceInterface) *Service {
+func NewService(repo RepositoryInterface, /*mapsService MapsServiceInterface,*/ paymentService PaymentServiceInterface, logisticsService LogisticsServiceInterface) *Service {
 	return &Service{
 		repo:             repo,
-		mapsService:      mapsService,
+		// mapsService:      mapsService, // remove
 		routeCache:       make(map[string]*models.RouteOption),
 		paymentService:   paymentService,
 		logisticsService: logisticsService,
@@ -58,24 +56,33 @@ func NewService(repo RepositoryInterface, mapsService MapsServiceInterface, paym
 // CreateOrder creates a new order based on a user's selected route option.
 func (s *Service) CreateOrder(ctx context.Context, userID string, req models.CreateOrderRequest) (*models.Order, error) {
 	s.routeCacheLock.RLock()
-	_, ok := s.routeCache[req.RouteOptionID]
+	routeOption, ok := s.routeCache[req.RouteOptionID]
 	s.routeCacheLock.RUnlock()
 
 	if !ok {
 		return nil, models.ErrRouteOptionExpired
 	}
 
-	// Create order using the details from the cached route option
-	// For now, using placeholder address IDs - in a real implementation, these would come from the route option
-	const pickupAddressID = "placeholder-pickup-address-id"
-	const dropoffAddressID = "placeholder-dropoff-address-id"
-	
-	order, err := s.repo.Create(ctx, userID, req, pickupAddressID, dropoffAddressID)
+	// Insert pickup and dropoff addresses, get their IDs
+	pickupAddr := routeOption.PickupLocation
+	pickupAddr.UserID = userID
+	pickupID, err := s.repo.InsertAddress(ctx, &pickupAddr)
+	if err != nil {
+		return nil, fmt.Errorf("service.CreateOrder: failed to insert pickup address: %w", err)
+	}
+	dropoffAddr := routeOption.DeliveryLocation
+	dropoffAddr.UserID = userID
+	dropoffID, err := s.repo.InsertAddress(ctx, &dropoffAddr)
+	if err != nil {
+		return nil, fmt.Errorf("service.CreateOrder: failed to insert dropoff address: %w", err)
+	}
+
+	order, err := s.repo.Create(ctx, userID, req, pickupID, dropoffID)
 	if err != nil {
 		return nil, fmt.Errorf("service.CreateOrder: %w", err)
 	}
 
-	// It's good practice to remove the route option from the cache after it has been used.
+	// Remove the route option from the cache after it has been used.
 	s.routeCacheLock.Lock()
 	delete(s.routeCache, req.RouteOptionID)
 	s.routeCacheLock.Unlock()
@@ -140,18 +147,6 @@ func (s *Service) CancelOrder(ctx context.Context, orderID string, userID string
 	return s.repo.UpdateStatusForUser(ctx, orderID, userID, "CANCELLED")
 }
 
-// --- Admin Service Methods ---
-
-// AdminUpdateOrder updates an order's status or assigns a machine.
-func (s *Service) AdminUpdateOrder(ctx context.Context, orderID string, req models.AdminUpdateOrderRequest) (*models.Order, error) {
-	// You might add more validation here, e.g., checking if the machine_id is valid and available.
-	order, err := s.repo.Update(ctx, orderID, req)
-	if err != nil {
-		return nil, fmt.Errorf("service.AdminUpdateOrder: %w", err)
-	}
-	return order, nil
-}
-
 // ConfirmAndPay confirms and pays for an order.
 func (s *Service) ConfirmAndPay(ctx context.Context, userID string, orderID string, req models.PaymentRequest) (*models.Order, error) {
 	// 1. Get the order details, ensuring it belongs to the user.
@@ -182,8 +177,13 @@ func (s *Service) ConfirmAndPay(ctx context.Context, userID string, orderID stri
 		return nil, fmt.Errorf("failed to update order status after successful payment: %w", err)
 	}
 
-	// 5. Call logisticsService.AssignDelivery after payment and status update
-	if err := s.logisticsService.AssignDelivery(ctx, updatedOrder); err != nil {
+	// 5. Call logisticsService.AssignOrder after payment and status update
+	machineID := ""
+	if updatedOrder.MachineID != nil {
+		machineID = *updatedOrder.MachineID
+	}
+	_, err = s.logisticsService.AssignOrder(ctx, updatedOrder.ID, machineID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to assign delivery after payment: %w", err)
 	}
 
@@ -210,4 +210,8 @@ func (s *Service) SubmitFeedback(ctx context.Context, userID string, orderID str
 	// this functionality would need to be implemented separately or
 	// the database schema would need to be updated.
 	return fmt.Errorf("feedback functionality not implemented in current schema")
+}
+
+func (s *Service) GetDeliveryQuote(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error) {
+	return s.logisticsService.CalculateRouteOptions(ctx, req)
 }
