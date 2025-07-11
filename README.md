@@ -50,7 +50,7 @@ Now the Go API is listening on http://localhost:8080
 the database is accessible on localhost:5432
 
 (optional) connect to the database with DBeaver/pgAdmin/psql/whatever you like
-(must do) manually test the endpoints through Postman/curl
+(must do) manually test the endpoints through Postman/curl/whatever you like
 
 6. Stop the application
 
