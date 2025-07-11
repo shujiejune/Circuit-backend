@@ -40,5 +40,8 @@ var (
 	// ErrFeedbackAlreadySubmitted is returned when a user tries to submit feedback
 	// for an order that already has feedback.
 	ErrFeedbackAlreadySubmitted = errors.New("feedback has already been submitted for this order")
-)
 
+	// ErrPackageTooLarge indicates that the weight or dimensions of the requested
+	// delivery exceed what our machines can handle.
+	ErrPackageTooLarge = errors.New("package exceeds allowed weight or dimensions")
+)

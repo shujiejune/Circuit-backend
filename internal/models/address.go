@@ -5,7 +5,7 @@ import "time"
 type Address struct {
 	ID            string    `json:"id" db:"id"`
 	UserID        string    `json:"-" db:"user_id"`
-	Label         string    `json:"label" db:"label"`
+	Label         *string   `json:"label,omitempty" db:"label"`
 	StreetAddress string    `json:"street_address" db:"street_address"`
 	IsDefault     bool      `json:"is_default" db:"is_default"`
 	CreatedAt     time.Time `json:"created_at" db:"created_at"`
@@ -14,14 +14,14 @@ type Address struct {
 
 // AddAddressRequest defines the shape of the request body for creating a new address.
 type AddAddressRequest struct {
-	Label         string `json:"label" validate:"required,min=2"`
-	StreetAddress string `json:"street_address" validate:"required,min=10"`
-	IsDefault     bool   `json:"is_default"`
+	Label         *string `json:"label" validate:"min=2"`
+	StreetAddress string  `json:"street_address" validate:"required,min=10"`
+	IsDefault     bool    `json:"is_default"`
 }
 
 // UpdateAddressRequest defines the shape of the request body for updating an address.
 type UpdateAddressRequest struct {
-	Label         string `json:"label,omitempty"`
-	StreetAddress string `json:"street_address,omitempty"`
-	IsDefault     *bool  `json:"is_default,omitempty"` // Pointer to handle 'false' as a valid update
-} 
+	Label         *string `json:"label,omitempty"`
+	StreetAddress string  `json:"street_address,omitempty"`
+	IsDefault     *bool   `json:"is_default,omitempty"` // Pointer to handle 'false' as a valid update
+}
