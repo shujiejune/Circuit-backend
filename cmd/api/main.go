@@ -11,14 +11,16 @@ import (
 
 	"dispatch-and-delivery/internal/api"
 	"dispatch-and-delivery/internal/config"
-	"dispatch-and-delivery/internal/modules/admin"
 	"dispatch-and-delivery/internal/modules/logistics"
-	"dispatch-and-delivery/internal/modules/orders"
-	"dispatch-and-delivery/internal/modules/users"
+	"dispatch-and-delivery/internal/modules/order"
+	"dispatch-and-delivery/internal/modules/user"
+	"dispatch-and-delivery/pkg/email"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 func main() {
@@ -62,25 +64,49 @@ func main() {
 	e.Logger.Info("Successfully connected to the database!")
 
 	// 3. --- Dependency Injection (Wiring everything up) ---
+	// Initialize Google OAuth Config
+	googleOAuthConfig := &oauth2.Config{
+		RedirectURL:  cfg.GoogleOAuthRedirectURL,
+		ClientID:     cfg.GoogleOAuthClientID,
+		ClientSecret: cfg.GoogleOAuthClientSecret,
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		},
+		Endpoint: google.Endpoint,
+	}
+
+	sesSender, err := email.NewSESV2Sender(context.Background(), cfg.AWSRegion, cfg.EmailFromAddress)
+	if err != nil {
+		log.Fatalf("Failed to create SES sender: %v", err)
+	}
+	templateManager, err := email.NewTemplateManager()
+	if err != nil {
+		log.Fatalf("Failed to parse email templates: %v", err)
+	}
+
 	// --- Users Module ---
-	userRepo := users.NewRepository(dbPool)
-	userService := users.NewService(userRepo, cfg.JWTSecret)
-	userHandler := users.NewHandler(userService)
+	userRepo := user.NewRepository(dbPool)
+	userService := user.NewService(
+		userRepo,
+		sesSender,
+		templateManager,
+		cfg.JWTSecret,
+		cfg.ClientOrigin,
+		googleOAuthConfig,
+	)
+	userHandler := user.NewHandler(userService)
 
 	// --- Orders Module ---
-	orderRepo := orders.NewRepository(dbPool)
-	orderService := orders.NewService(orderRepo, cfg.JWTSecret)
-	orderHandler := orders.NewHandler(orderService)
+	orderRepo := order.NewRepository(dbPool)
+	orderService := order.NewService(orderRepo, cfg.JWTSecret)
+	orderHandler := order.NewHandler(orderService)
 
 	// --- Logistics Module ---
 	logisticsRepo := logistics.NewRepository(dbPool)
-	logisticsService := logistics.NewService(logisticsRepo, orderService, cfg.JWTSecret)
+	// Initialize the logistics service with the repository and Google Maps API key
+	logisticsService := logistics.NewService(logisticsRepo, cfg.GoogleMapsAPIKey)
 	logisticsHandler := logistics.NewHandler(logisticsService)
-
-	// --- Admin Module ---
-	adminRepo := admin.NewRepository(dbPool)
-	adminService := admin.NewService(adminRepo, orderRepo, logisticsRepo)
-	adminHandler := admin.NewHandler(adminService)
 
 	// 4. --- Initialize Router ---
 	// Add more routes
@@ -88,7 +114,6 @@ func main() {
 		userHandler,
 		orderHandler,
 		logisticsHandler,
-		adminHandler,
 	)
 
 	// 5. --- Start Server with graceful shutdown logic ---

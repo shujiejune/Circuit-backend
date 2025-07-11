@@ -3,7 +3,7 @@ CREATE TABLE users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'USER', -- ('USER', 'ADMIN')
+    -- role VARCHAR(50) NOT NULL DEFAULT 'USER', -- ('USER', 'ADMIN')
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

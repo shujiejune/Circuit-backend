@@ -4,10 +4,9 @@ import (
 	"net/http"
 
 	"dispatch-and-delivery/internal/api/middleware"
-	"dispatch-and-delivery/internal/modules/admin"
 	"dispatch-and-delivery/internal/modules/logistics"
-	"dispatch-and-delivery/internal/modules/orders"
-	"dispatch-and-delivery/internal/modules/users"
+	"dispatch-and-delivery/internal/modules/order"
+	"dispatch-and-delivery/internal/modules/user"
 
 	"github.com/labstack/echo/v4"
 )
@@ -15,27 +14,31 @@ import (
 // SetupRoutes sets up all the API endpoints for the application.
 func SetupRoutes(
 	e *echo.Echo,
-	userHandler *users.Handler,
-	orderHandler *orders.Handler,
+	jwtSecretKey string,
+	userHandler *user.Handler,
+	orderHandler *order.Handler,
 	logisticsHandler *logistics.Handler,
-	adminHandler *admin.Handler,
-	jwtSecret string,
 ) {
 	// Initialize the JWT authentication middleware
-	authMiddleware := middleware.JWTMAuth(jwtSecret)
+	authMiddleware := middleware.JWTMAuth(jwtSecretKey)
 	// Initialize an Admin role authorization middleware
-	adminRequired := middleware.AdminRequired()
+	// adminRequired := middleware.AdminRequired()
 
 	// --- Public Routes ---
 	e.GET("/", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"message": "Welcome to Dispatch and Delivery Platform!"})
+		return c.JSON(http.StatusOK, map[string]string{"message": "Welcome to Circuit: Proudly Provides Logistics as a Service!"})
 	})
 
 	authGroup := e.Group("/auth")
 	{
 		authGroup.POST("/signup", userHandler.Signup)
 		authGroup.POST("/login", userHandler.Login)
-		// Logout and ResetPassword
+		authGroup.POST("/activate", userHandler.ActivateAccount)
+		authGroup.POST("/resend-activation", userHandler.ResendActivation)
+		authGroup.POST("/request-password-reset", userHandler.RequestPasswordReset)
+		authGroup.POST("/reset-password", userHandler.ResetPassword)
+		authGroup.GET("/google/login", userHandler.GoogleLogin)
+		authGroup.GET("/google/callback", userHandler.GoogleCallback)
 	}
 
 	// --- User (Customer) Routes ---
@@ -43,9 +46,9 @@ func SetupRoutes(
 	{
 
 		// User Profile & Addresses
-		profileGroup.GET("", userHandler.GetMyProfile)
-		profileGroup.PUT("", userHandler.UpdateMyProfile)
-		profileGroup.GET("/addresses", userHandler.ListMyAddresses)
+		profileGroup.GET("", userHandler.GetProfile)
+		profileGroup.PUT("", userHandler.UpdateProfile)
+		profileGroup.GET("/addresses", userHandler.ListAddresses)
 		profileGroup.POST("/addresses", userHandler.AddAddress)
 		profileGroup.PUT("/addresses/:addressId", userHandler.UpdateAddress)
 		profileGroup.DELETE("/addresses/:addressId", userHandler.DeleteAddress)
@@ -57,6 +60,7 @@ func SetupRoutes(
 		orderGroup.POST("/quote", orderHandler.GetDeliveryQuote) // Get route options and prices
 		orderGroup.POST("", orderHandler.CreateOrder)
 		orderGroup.GET("", orderHandler.ListMyOrders)
+		orderGroup.GET("", orderHandler.ListAllOrders)
 		orderGroup.GET("/:orderId", orderHandler.GetOrderDetails)
 		orderGroup.PUT("/:orderId/cancel", orderHandler.CancelOrder)
 		orderGroup.POST("/:orderId/pay", orderHandler.ConfirmAndPay)
@@ -64,21 +68,14 @@ func SetupRoutes(
 	}
 
 	// --- Logistics & Tracking Routes ---
-	e.GET("/ws/orders/:orderId/track", logisticsHandler.HandleTracking, authMiddleware) // Potentially WebSocket
-
-	// --- Admin Routes ---
-	adminGroup := e.Group("/admin", authMiddleware, adminRequired)
+	logisticsGroup := e.Group("/logistics", authMiddleware)
 	{
-		// Order Management
-		adminGroup.GET("/orders", adminHandler.GetAllOrders)                     // View all orders in the system
-		adminGroup.GET("/orders/:orderId", adminHandler.GetAnyOrder)             // View details of any specific order
-		adminGroup.POST("/orders/:orderId/reassign", adminHandler.ReassignOrder) // Manually reassign a failed delivery
-
-		// Machine Management
-		adminGroup.GET("/fleet", adminHandler.GetAllMachinesWithStatus)           // Get a list of all machines and their status
-		adminGroup.PUT("/fleet/:machineId/status", adminHandler.SetMachineStatus) // e.g., Set to "under_maintenance"
-
-		// User Management
-		adminGroup.GET("/users", adminHandler.GetAllUsers) // View a list of all registered users
+		logisticsGroup.GET("/fleet", logisticsHandler.GetFleet)
+		logisticsGroup.PUT("/fleet/:machineId/status", logisticsHandler.SetMachineStatus)
+		logisticsGroup.POST("/quote", logisticsHandler.CalculateQuote)
+		logisticsGroup.POST("/orders/:orderId/route", logisticsHandler.ComputeRoute)
+		logisticsGroup.POST("/orders/:orderId/assign", logisticsHandler.ReassignOrder)
+		logisticsGroup.POST("/orders/:orderId/track", logisticsHandler.ReportTracking)
+		logisticsGroup.GET("/orders/:orderId/track", logisticsHandler.GetTracking)
 	}
 }
