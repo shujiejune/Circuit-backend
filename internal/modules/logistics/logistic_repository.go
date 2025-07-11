@@ -3,6 +3,7 @@ package logistics
 import (
     "context"
     "fmt"
+    "time"
 
     "dispatch-and-delivery/internal/models"
 
@@ -40,8 +41,8 @@ type RepositoryInterface interface {
     // ===== Tracking =====
     // CreateTrackingEvent 新增一条订单轨迹事件，将机器位置写入 tracking_events 表。
     CreateTrackingEvent(ctx context.Context, event *models.TrackingEvent) error
-    // ListTrackingEvents 按时间升序查询指定订单的所有轨迹事件。
-    ListTrackingEvents(ctx context.Context, orderID string) ([]*models.TrackingEvent, error)
+    // ListTrackingEvents 按时间升序查询指定订单的所有轨迹事件，可选起始时间
+    ListTrackingEvents(ctx context.Context, orderID string, since time.Time) ([]*models.TrackingEvent, error)
 }
 
 // Repository 实现 RepositoryInterface，使用 PostgreSQL (pgxpool.Pool) 与数据库交互。
@@ -272,16 +273,16 @@ func (r *Repository) CreateTrackingEvent(ctx context.Context, event *models.Trac
 
 // ListTrackingEvents 按 created_at 升序查询指定订单的所有轨迹事件，
 // 并将经纬度解析为模型字段。
-func (r *Repository) ListTrackingEvents(ctx context.Context, orderID string) ([]*models.TrackingEvent, error) {
+func (r *Repository) ListTrackingEvents(ctx context.Context, orderID string, since time.Time) ([]*models.TrackingEvent, error) {
     const query = `
         SELECT id, order_id, machine_id,
                COALESCE(ST_Y(location::geometry), 0) AS lat,
                COALESCE(ST_X(location::geometry), 0) AS lon,
                created_at
         FROM tracking_events
-        WHERE order_id = $1
+        WHERE order_id = $1 AND created_at > $2
         ORDER BY created_at`
-    rows, err := r.db.Query(ctx, query, orderID)
+    rows, err := r.db.Query(ctx, query, orderID, since)
     if err != nil {
         return nil, fmt.Errorf("ListTrackingEvents failed: %w", err)
     }

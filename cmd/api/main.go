@@ -99,7 +99,8 @@ func main() {
 
 	// --- Logistics Module ---
 	logisticsRepo := logistics.NewRepository(dbPool)
-	logisticsService := logistics.NewService(logisticsRepo, cfg.JWTSecret)
+	// Initialize the logistics service with the repository and Google Maps API key
+	logisticsService := logistics.NewService(logisticsRepo, cfg.GoogleMapsAPIKey)
 	logisticsHandler := logistics.NewHandler(logisticsService)
 
 	// --- Orders Module ---

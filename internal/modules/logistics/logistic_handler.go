@@ -30,29 +30,6 @@ func NewHandler(svc ServiceInterface) *Handler {
 	return &Handler{svc: svc}
 }
 
-// RegisterRoutes 在给定的 Echo 路由组中挂载所有物流相关路由。
-// 顺序：机器管理 → 管理后台手动分配 → 客户报价 → 支付后自动派单 → 路线持久化 → 实时轨迹
-func (h *Handler) RegisterRoutes(g *echo.Group) {
-	// 1) 机器管理
-	g.GET("/fleet", h.GetFleet)
-	g.PUT("/fleet/:machineId/status", h.SetMachineStatus)
-
-	// 2) 管理后台手动分配
-	g.POST("/admin/orders/:orderId/reassign", h.ReassignOrder)
-
-	// 3) 客户端下单前报价
-	g.POST("/orders/quote", h.CalculateQuote)
-
-	// 4) 客户端支付完成后派单
-	g.POST("/orders/:orderId/assign", h.ReassignOrder)
-
-	// 5) 纯路线计算并持久化
-	g.POST("/orders/:orderId/route", h.ComputeRoute)
-
-	// 6) 轨迹上报与查询
-	g.POST("/orders/:orderId/track", h.ReportTracking)
-	g.GET("/orders/:orderId/track", h.GetTracking)
-}
 
 // ---- 1) 机器管理 ----
 
@@ -142,6 +119,9 @@ func (h *Handler) CalculateQuote(c echo.Context) error {
 
 	options, err := h.svc.CalculateRouteOptions(ctx, req)
 	if err != nil {
+		if err == models.ErrPackageTooLarge {
+			return c.JSON(http.StatusBadRequest, models.ErrorResponse{Message: err.Error()})
+		}
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "failed to calculate quote"})
 	}
 	return c.JSON(http.StatusOK, options)
@@ -192,8 +172,17 @@ func (h *Handler) ReportTracking(c echo.Context) error {
 func (h *Handler) GetTracking(c echo.Context) error {
 	ctx := c.Request().Context()
 	orderID := c.Param("orderId")
+	sinceStr := c.QueryParam("since")
+	var since time.Time
+	if sinceStr != "" {
+		t, err := time.Parse(time.RFC3339, sinceStr)
+		if err == nil {
+			since = t
+		}
+	}
 
-	events, err := h.svc.GetTracking(ctx, orderID)
+
+	events, err := h.svc.GetTracking(ctx, orderID, since)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "failed to get tracking"})
 	}
