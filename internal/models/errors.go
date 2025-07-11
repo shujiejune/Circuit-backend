@@ -10,4 +10,7 @@ var ErrInvalidCredentials = errors.New("invalid credentials") // email or passwo
 var ErrNicknameTaken = errors.New("nickname already taken")
 var ErrInvalidForumPostCategoryID = errors.New("invalid category of forum post")
 
+// ErrPackageTooLarge indicates that the weight or dimensions of the requested
+// delivery exceed what our machines can handle.
+var ErrPackageTooLarge = errors.New("package exceeds allowed weight or dimensions")
 // Add other common domain errors

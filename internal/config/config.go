@@ -17,6 +17,7 @@ type Config struct {
 	AWSAccessKeyID          string `mapstructure:"AWS_ACCESS_KEY_ID"`
 	AWSSecretAccessKey      string `mapstructure:"AWS_SECRET_ACCESS_KEY"`
 	EmailFromAddress        string `mapstructure:"EMAIL_FROM_ADDRESS"`
+	GoogleMapsAPIKey        string `mapstructure:"GOOGLE_MAPS_API_KEY"`
 }
 
 func LoadConfig(path string) (config Config, err error) {
