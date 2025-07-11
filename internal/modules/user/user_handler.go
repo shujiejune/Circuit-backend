@@ -147,6 +147,7 @@ func (h *Handler) ActivateAccount(c echo.Context) error {
 	}
 
 	// After activation, automatically log the user in by issuing a JWT
+	fmt.Println("Activation Token: ", req.Token)
 	authResponse, err := h.service.ActivateUserAndLogin(c.Request().Context(), req.Token)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidToken) {
@@ -226,6 +227,7 @@ func (h *Handler) ResetPassword(c echo.Context) error {
 	// 3. Call the corresponding service method to perform the core logic.
 	// The service will verify the token, hash the new password, update the database,
 	// and generate a new JWT.
+	fmt.Println("Reset Password Token: ", req.Token)
 	authResponse, err := h.service.ResetPassword(c.Request().Context(), req.Token, req.NewPassword)
 	if err != nil {
 		// 4. Handle specific errors returned from the service layer.
