@@ -2,20 +2,19 @@
 
 -- Seed Users
 INSERT INTO users (id, name, email, password_hash) VALUES
-('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Alice User', 'alice@example.com', '$2a$10$T.s.t.u.v.w.x.y.z.A.B.C.D.E.F.G.H.I.J.K.L.M.N.O.P.Q'),
-('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', 'Bob Admin', 'bob@example.com', '$2a$10$T.s.t.u.v.w.x.y.z.A.B.C.D.E.F.G.H.I.J.K.L.M.N.O.P.Q')
+('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Alice', 'alice@example.com', '$2a$10$hTyELZ8pkgk8xPNmvVz8WOFh5.b4RyjIqKHzJg1F3Xg1ZwHPDAJgO')
 ON CONFLICT (email) DO NOTHING;
 
 -- Seed Addresses for Alice
-INSERT INTO addresses (user_id, label, street_address, is_default) VALUES
-('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Home', '123 Main St, San Francisco, CA 94105', true),
-('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Work', '456 Market St, San Francisco, CA 94104', false)
+INSERT INTO addresses (id, user_id, label, street_address, is_default) VALUES
+('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a21', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Home', '123 Main St, San Francisco, CA 94105', true),
+('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Work', '456 Market St, San Francisco, CA 94104', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Machines (one drone, one robot)
-INSERT INTO machines (type, status, current_location, battery_level) VALUES
-('DRONE', 'IDLE', ST_SetSRID(ST_MakePoint(-122.4000, 37.7880), 4326), 95),
-('ROBOT', 'IDLE', ST_SetSRID(ST_MakePoint(-122.4194, 37.7749), 4326), 88)
+INSERT INTO machines (id, type, status, current_location, battery_level) VALUES
+('d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a31', 'DRONE', 'IDLE', ST_SetSRID(ST_MakePoint(-122.4000, 37.7880), 4326), 95),
+('d0eebc99-9c0b-4ef8-bb6d-6bb9bd380a32', 'ROBOT', 'IDLE', ST_SetSRID(ST_MakePoint(-122.4194, 37.7749), 4326), 88)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed a completed order for Alice to populate history

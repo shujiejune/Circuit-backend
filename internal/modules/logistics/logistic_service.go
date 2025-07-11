@@ -93,8 +93,8 @@ func (s *service) CalculateRouteOptions(ctx context.Context, req models.RouteReq
 	// 4) “最快” 使用 DRONE
 	fastest := models.RouteOption{
 		ID:               uuid.NewString(),
-		Pickup:           pickup,
-		Delivery:         dropoff,
+		PickupLocation:   pickup,
+		DeliveryLocation: dropoff,
 		Polyline:         polyline,
 		DistanceMeters:   dMeters,
 		DurationSeconds:  dSeconds,
@@ -106,11 +106,11 @@ func (s *service) CalculateRouteOptions(ctx context.Context, req models.RouteReq
 	// 5) “最便宜” 使用 ROBOT
 	cheapest := models.RouteOption{
 		ID:               uuid.NewString(),
-		Pickup:           pickup,
-		Delivery:         dropoff,
+		PickupLocation:   pickup,
+		DeliveryLocation: dropoff,
 		Polyline:         polyline,
 		DistanceMeters:   dMeters,
-		DurationSeconds:  int(math.Ceil(float64(dSeconds)*2)), // 假设地面速度为飞行一半
+		DurationSeconds:  int(math.Ceil(float64(dSeconds) * 2)), // 假设地面速度为飞行一半
 		Strategy:         models.CheapestStrategy,
 		EstimatedCost:    computeCost(dMeters, dSeconds, models.MachineTypeRobot, peak),
 		MachineType:      models.MachineTypeRobot,
@@ -195,9 +195,9 @@ func (s *service) callGoogleMaps(ctx context.Context, origin, destination string
 
 // computeCost 根据距离、时长、机器类型和是否高峰期计算价格
 // 说明：
-//  1) 基础费 base + 单位距离费/Km * km
-//  2) 高峰期乘以 peakMultiplier
-//  3) 根据机器类型(drone/robot)应用不同 base/perKm
+//  1. 基础费 base + 单位距离费/Km * km
+//  2. 高峰期乘以 peakMultiplier
+//  3. 根据机器类型(drone/robot)应用不同 base/perKm
 func computeCost(distanceMeters, durationSeconds int, machineType string, peak bool) float64 {
 	// 1) 转换距离为公里
 	km := float64(distanceMeters) / 1000.0
@@ -217,6 +217,7 @@ func computeCost(distanceMeters, durationSeconds int, machineType string, peak b
 	// 5) 保留两位小数
 	return math.Round(price*100) / 100
 }
+
 // isPeakHour 判断给定时间是否属于高峰期
 // 支持传入请求时间，当为零值时使用当前时间
 func isPeakHour(requestedTime time.Time) bool {
