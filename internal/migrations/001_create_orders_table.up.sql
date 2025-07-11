@@ -11,8 +11,6 @@ CREATE TABLE orders (
     item_height_cm DECIMAL(10,2) NOT NULL,
     item_weight_kg DECIMAL(10, 2) NOT NULL,
     cost DECIMAL(10, 2) NOT NULL,
-    feedback_rating INTEGER,
-    feedback_comment TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgconn" // 新增
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,6 +20,7 @@ type RepositoryInterface interface {
 	ListAll(ctx context.Context, page, limit int) ([]*models.Order, int, error)
 	UpdateStatusForUser(ctx context.Context, orderID string, userID string, status string) error
 	InsertAddress(ctx context.Context, addr *models.Address) (string, error)
+	InsertFeedback(ctx context.Context, orderID string, req models.FeedbackRequest) error // 新增
 }
 
 // Repository implements the RepositoryInterface.
@@ -137,6 +139,23 @@ func (r *Repository) InsertAddress(ctx context.Context, addr *models.Address) (s
 	return id, nil
 }
 
+// InsertFeedback inserts feedback for an order.
+func (r *Repository) InsertFeedback(ctx context.Context, orderID string, req models.FeedbackRequest) error {
+	query := `
+		INSERT INTO feedback (order_id, rating, comment)
+		VALUES ($1, $2, $3)
+	`
+	_, err := r.db.Exec(ctx, query, orderID, req.Rating, req.Comment)
+	if err != nil {
+		// 唯一索引冲突，说明已评价
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+			return models.ErrFeedbackAlreadySubmitted
+		}
+		return fmt.Errorf("repository.InsertFeedback: %w", err)
+	}
+	return nil
+}
+
 // FindByID retrieves a single order by its ID.
 func (r *Repository) FindByID(ctx context.Context, orderID string) (*models.Order, error) {
 	query := `
@@ -184,9 +203,34 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 
 	var orders []*models.Order
 	for rows.Next() {
-		order, err := r.scanOrder(rows)
+		order := &models.Order{}
+		var machineIDFromDB sql.NullString
+		err := rows.Scan(
+			&order.ID,
+			&order.UserID,
+			&machineIDFromDB,
+			&order.PickupAddressID,
+			&order.DropoffAddressID,
+			&order.Status,
+			&order.ItemLengthCm,
+			&order.ItemWidthCm,
+			&order.ItemHeightCm,
+			&order.ItemWeightKg,
+			&order.Cost,
+			&order.CreatedAt,
+			&order.UpdatedAt,
+		)
 		if err != nil {
-			return nil, 0, fmt.Errorf("repository.ListByUserID.scanOrder: %w", err)
+			return nil, 0, fmt.Errorf("repository.ListByUserID.scan: %w", err)
+		}
+		if machineIDFromDB.Valid {
+			order.MachineID = &machineIDFromDB.String
+		} else {
+			order.MachineID = nil
+		}
+		feedback, err := r.getFeedbackByOrderID(context.Background(), order.ID)
+		if err == nil {
+			order.Feedback = feedback
 		}
 		orders = append(orders, order)
 	}
@@ -217,9 +261,34 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 
 	var orders []*models.Order
 	for rows.Next() {
-		order, err := r.scanOrder(rows)
+		order := &models.Order{}
+		var machineIDFromDB sql.NullString
+		err := rows.Scan(
+			&order.ID,
+			&order.UserID,
+			&machineIDFromDB,
+			&order.PickupAddressID,
+			&order.DropoffAddressID,
+			&order.Status,
+			&order.ItemLengthCm,
+			&order.ItemWidthCm,
+			&order.ItemHeightCm,
+			&order.ItemWeightKg,
+			&order.Cost,
+			&order.CreatedAt,
+			&order.UpdatedAt,
+		)
 		if err != nil {
-			return nil, 0, fmt.Errorf("repository.ListAll.scanOrder: %w", err)
+			return nil, 0, fmt.Errorf("repository.ListAll.scan: %w", err)
+		}
+		if machineIDFromDB.Valid {
+			order.MachineID = &machineIDFromDB.String
+		} else {
+			order.MachineID = nil
+		}
+		feedback, err := r.getFeedbackByOrderID(context.Background(), order.ID)
+		if err == nil {
+			order.Feedback = feedback
 		}
 		orders = append(orders, order)
 	}

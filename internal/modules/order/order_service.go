@@ -194,22 +194,17 @@ func (s *Service) ConfirmAndPay(ctx context.Context, userID string, orderID stri
 // Note: This functionality is not available in the current database schema
 // as there are no feedback fields in the orders table.
 func (s *Service) SubmitFeedback(ctx context.Context, userID string, orderID string, req models.FeedbackRequest) error {
-	// 1. Get the order details, ensuring it belongs to the user.
 	order, err := s.GetOrderDetails(ctx, orderID, userID, "user")
 	if err != nil {
-		return err // Handles not found or not authorized
+		return err
 	}
-
-	// 2. Check if feedback can be submitted for this order.
-	// Typically, feedback is only allowed for 'DELIVERED' orders.
 	if order.Status != "DELIVERED" {
 		return models.ErrCannotSubmitFeedback
 	}
-
-	// 3. Since feedback fields are not in the current database schema,
-	// this functionality would need to be implemented separately or
-	// the database schema would need to be updated.
-	return fmt.Errorf("feedback functionality not implemented in current schema")
+	if order.Feedback != nil {
+		return models.ErrFeedbackAlreadySubmitted
+	}
+	return s.repo.InsertFeedback(ctx, orderID, req)
 }
 
 func (s *Service) GetDeliveryQuote(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error) {
