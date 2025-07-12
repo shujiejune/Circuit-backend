@@ -10,9 +10,9 @@ const (
 
 // Dimensions describes the package size in meters.
 type Dimensions struct {
-	Length float64 `json:"length_m"`
-	Width  float64 `json:"width_m"`
-	Height float64 `json:"height_m"`
+	Length float64 `json:"length_m" validate:"required,gt=0"`
+	Width  float64 `json:"width_m" validate:"required,gt=0"`
+	Height float64 `json:"height_m" validate:"required,gt=0"`
 }
 
 // RouteRequest is the input from the user to get route options.
@@ -51,4 +51,3 @@ type Route struct {
 	DurationSeconds int       `json:"duration_seconds"`
 	CreatedAt       time.Time `json:"created_at"`
 }
-

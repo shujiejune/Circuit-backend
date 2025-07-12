@@ -15,6 +15,7 @@ import (
 	"dispatch-and-delivery/internal/modules/order"
 	"dispatch-and-delivery/internal/modules/user"
 	"dispatch-and-delivery/pkg/email"
+	"dispatch-and-delivery/pkg/payment"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -85,6 +86,8 @@ func main() {
 		log.Fatalf("Failed to parse email templates: %v", err)
 	}
 
+	paymentService := payment.NewStripeService(cfg.StripeAPIKey)
+
 	// --- Users Module ---
 	userRepo := user.NewRepository(dbPool)
 	userService := user.NewService(
@@ -99,13 +102,12 @@ func main() {
 
 	// --- Logistics Module ---
 	logisticsRepo := logistics.NewRepository(dbPool)
-	// Initialize the logistics service with the repository and Google Maps API key
 	logisticsService := logistics.NewService(logisticsRepo, cfg.GoogleMapsAPIKey)
 	logisticsHandler := logistics.NewHandler(logisticsService)
 
 	// --- Orders Module ---
 	orderRepo := order.NewRepository(dbPool)
-	orderService := order.NewService(orderRepo, logisticsService, cfg.JWTSecret)
+	orderService := order.NewService(orderRepo, paymentService, logisticsService)
 	orderHandler := order.NewHandler(orderService)
 
 	// 4. --- Initialize Router ---
