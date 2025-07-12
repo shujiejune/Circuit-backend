@@ -11,7 +11,7 @@ import (
 // LogisticsServiceInterface defines the contract for the logistics service.
 type LogisticsServiceInterface interface {
 	CalculateRouteOptions(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error)
-	AssignOrder(ctx context.Context, orderID, machineID string) (*models.Machine, error)
+	AssignOrder(ctx context.Context, orderID string) (*models.Machine, error)
 }
 
 // ServiceInterface defines the contract for the order service.
@@ -31,21 +31,20 @@ type PaymentServiceInterface interface {
 	ProcessPayment(ctx context.Context, userID string, amount float64, paymentMethodID string) (string, error)
 }
 
-
 // Service implements the order service logic.
 type Service struct {
-	repo           RepositoryInterface
+	repo RepositoryInterface
 	// mapsService    MapsServiceInterface // For interacting with an external maps API. (remove)
-	routeCache     map[string]*models.RouteOption // In-memory cache for route options
-	routeCacheLock sync.RWMutex
-	paymentService PaymentServiceInterface
+	routeCache       map[string]*models.RouteOption // In-memory cache for route options
+	routeCacheLock   sync.RWMutex
+	paymentService   PaymentServiceInterface
 	logisticsService LogisticsServiceInterface // Inject logistics service
 }
 
 // NewService creates a new order service.
-func NewService(repo RepositoryInterface, /*mapsService MapsServiceInterface,*/ paymentService PaymentServiceInterface, logisticsService LogisticsServiceInterface) *Service {
+func NewService(repo RepositoryInterface /*mapsService MapsServiceInterface,*/, paymentService PaymentServiceInterface, logisticsService LogisticsServiceInterface) *Service {
 	return &Service{
-		repo:             repo,
+		repo: repo,
 		// mapsService:      mapsService, // remove
 		routeCache:       make(map[string]*models.RouteOption),
 		paymentService:   paymentService,
@@ -180,11 +179,7 @@ func (s *Service) ConfirmAndPay(ctx context.Context, userID string, orderID stri
 	}
 
 	// 6. Call logisticsService.AssignOrder after payment and status update
-	machineID := ""
-	if updatedOrder.MachineID != nil {
-		machineID = *updatedOrder.MachineID
-	}
-	_, err = s.logisticsService.AssignOrder(ctx, updatedOrder.ID, machineID)
+	_, err = s.logisticsService.AssignOrder(ctx, updatedOrder.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign delivery after payment: %w", err)
 	}
