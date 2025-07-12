@@ -45,7 +45,7 @@ func (r *Repository) Create(ctx context.Context, userID string, req models.Creat
 	const defaultWeight = 1.0
 	const defaultCost = 15.75
 
-	row := r.db.QueryRow(ctx, query, userID, pickupAddressID, dropoffAddressID, req.ItemLengthCm, req.ItemWidthCm, req.ItemHeightCm, defaultWeight, defaultCost)
+	row := r.db.QueryRow(ctx, query, userID, pickupAddressID, dropoffAddressID, req.Dimensions.Length, req.Dimensions.Width, req.Dimensions.Height, defaultWeight, defaultCost)
 	order, err := r.scanOrder(row)
 	if err != nil {
 		return nil, fmt.Errorf("repository.CreateOrder: %w", err)
@@ -57,6 +57,7 @@ func (r *Repository) Create(ctx context.Context, userID string, req models.Creat
 func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 	var order models.Order
 	var machineIDFromDB sql.NullString
+	var lengthCm, widthCm, heightCm float64
 	err := row.Scan(
 		&order.ID,
 		&order.UserID,
@@ -64,9 +65,9 @@ func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 		&order.PickupAddressID,
 		&order.DropoffAddressID,
 		&order.Status,
-		&order.ItemLengthCm,
-		&order.ItemWidthCm,
-		&order.ItemHeightCm,
+		&lengthCm,
+		&widthCm,
+		&heightCm,
 		&order.ItemWeightKg,
 		&order.Cost,
 		&order.CreatedAt,
@@ -83,6 +84,13 @@ func (r *Repository) scanOrder(row pgx.Row) (*models.Order, error) {
 		order.MachineID = &machineIDFromDB.String
 	} else {
 		order.MachineID = nil
+	}
+
+	// Set Dimensions from scanned values
+	order.Dimensions = models.Dimensions{
+		Length: lengthCm,
+		Width:  widthCm,
+		Height: heightCm,
 	}
 
 	// Fetch feedback for this order
@@ -205,6 +213,7 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 	for rows.Next() {
 		order := &models.Order{}
 		var machineIDFromDB sql.NullString
+		var lengthCm, widthCm, heightCm float64
 		err := rows.Scan(
 			&order.ID,
 			&order.UserID,
@@ -212,9 +221,9 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 			&order.PickupAddressID,
 			&order.DropoffAddressID,
 			&order.Status,
-			&order.ItemLengthCm,
-			&order.ItemWidthCm,
-			&order.ItemHeightCm,
+			&lengthCm,
+			&widthCm,
+			&heightCm,
 			&order.ItemWeightKg,
 			&order.Cost,
 			&order.CreatedAt,
@@ -227,6 +236,12 @@ func (r *Repository) ListByUserID(ctx context.Context, userID string, page, limi
 			order.MachineID = &machineIDFromDB.String
 		} else {
 			order.MachineID = nil
+		}
+		// Set Dimensions from scanned values
+		order.Dimensions = models.Dimensions{
+			Length: lengthCm,
+			Width:  widthCm,
+			Height: heightCm,
 		}
 		feedback, err := r.getFeedbackByOrderID(context.Background(), order.ID)
 		if err == nil {
@@ -263,6 +278,7 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 	for rows.Next() {
 		order := &models.Order{}
 		var machineIDFromDB sql.NullString
+		var lengthCm, widthCm, heightCm float64
 		err := rows.Scan(
 			&order.ID,
 			&order.UserID,
@@ -270,9 +286,9 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 			&order.PickupAddressID,
 			&order.DropoffAddressID,
 			&order.Status,
-			&order.ItemLengthCm,
-			&order.ItemWidthCm,
-			&order.ItemHeightCm,
+			&lengthCm,
+			&widthCm,
+			&heightCm,
 			&order.ItemWeightKg,
 			&order.Cost,
 			&order.CreatedAt,
@@ -285,6 +301,12 @@ func (r *Repository) ListAll(ctx context.Context, page, limit int) ([]*models.Or
 			order.MachineID = &machineIDFromDB.String
 		} else {
 			order.MachineID = nil
+		}
+		// Set Dimensions from scanned values
+		order.Dimensions = models.Dimensions{
+			Length: lengthCm,
+			Width:  widthCm,
+			Height: heightCm,
 		}
 		feedback, err := r.getFeedbackByOrderID(context.Background(), order.ID)
 		if err == nil {

@@ -167,17 +167,19 @@ func (s *Service) ConfirmAndPay(ctx context.Context, userID string, orderID stri
 	}
 
 	// 4. Update order status to 'CONFIRMED' after successful payment.
-	updateReq := models.AdminUpdateOrderRequest{
-		Status: &[]string{"CONFIRMED"}[0],
-	}
-	updatedOrder, err := s.repo.Update(ctx, orderID, updateReq)
+	err = s.repo.UpdateStatusForUser(ctx, orderID, userID, "CONFIRMED")
 	if err != nil {
-		// This is a critical error. The payment went through but we couldn't update our DB.
 		log.Printf("CRITICAL: Payment processed for order %s but failed to update status: %v", orderID, err)
 		return nil, fmt.Errorf("failed to update order status after successful payment: %w", err)
 	}
 
-	// 5. Call logisticsService.AssignOrder after payment and status update
+	// 5. 查出最新订单
+	updatedOrder, err := s.repo.FindByID(ctx, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated order after payment: %w", err)
+	}
+
+	// 6. Call logisticsService.AssignOrder after payment and status update
 	machineID := ""
 	if updatedOrder.MachineID != nil {
 		machineID = *updatedOrder.MachineID
