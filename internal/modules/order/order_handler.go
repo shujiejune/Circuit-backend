@@ -12,17 +12,15 @@ import (
 
 // Handler handles HTTP requests for orders.
 type Handler struct {
-	svc              ServiceInterface
-	logisticsService LogisticsServiceInterface // Add this field
-	validate         *validator.Validate // For request body validation
+	svc      ServiceInterface
+	validate *validator.Validate // For request body validation
 }
 
 // NewHandler creates a new order handler.
-func NewHandler(svc ServiceInterface, logisticsService LogisticsServiceInterface) *Handler {
+func NewHandler(svc ServiceInterface) *Handler {
 	return &Handler{
-		svc:              svc,
-		logisticsService: logisticsService,
-		validate:         validator.New(),
+		svc:      svc,
+		validate: validator.New(),
 	}
 }
 
