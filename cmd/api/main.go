@@ -34,7 +34,7 @@ func main() {
 	}
 
 	e := echo.New()
-	e.Logger.Fatal(e.Start(":" + cfg.ServerPort))
+	// e.Logger.Fatal(e.Start(":" + cfg.ServerPort))
 
 	// 2. --- Middleware ---
 	e.Use(middleware.Logger())

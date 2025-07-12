@@ -105,6 +105,7 @@ func (s *Service) Signup(ctx context.Context, req models.SignupRequest) (*models
 		return nil, fmt.Errorf("service.Signup.GenerateToken: %w", err)
 	}
 	expiresAt := time.Now().Add(time.Minute * 30)
+	log.Println("GENERATED ACTIVATION TOKEN:", activationToken)
 
 	// 4. Create the inactive user in the database
 	newUser := &models.User{
@@ -129,7 +130,7 @@ func (s *Service) Signup(ctx context.Context, req models.SignupRequest) (*models
 		return createdUser, nil
 	}
 
-	emailSubject := "Welcome! Please Activate Your Account"
+	emailSubject := "[Circuit] Welcome! Please Activate Your Account"
 	plainTextContent := fmt.Sprintf("Thank you for signing up! Please click the following link in 30 minutes to activate your account: %s", activationURL)
 
 	go func() {
@@ -163,7 +164,7 @@ func (s *Service) generateAuthResponse(user *models.User) (*models.AuthResponse,
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	user.PasswordHash = "" // Do NOT send sensitive info back
+	user.PasswordHash = nil // Do NOT send sensitive info back
 
 	return &models.AuthResponse{
 		AccessToken: tokenSignedString,
@@ -182,13 +183,23 @@ func (s *Service) Login(ctx context.Context, req models.LoginRequest) (*models.A
 	}
 
 	// 2. Compare the provided password with the stored hash
-	err = bcrypt.CompareHashAndPassword([]byte(userWithHash.PasswordHash), []byte(req.Password))
+	if userWithHash.PasswordHash == nil {
+		// This user was created via OAuth and has no password.
+		return nil, models.ErrInvalidCredentials
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(*userWithHash.PasswordHash), []byte(req.Password))
 	if err != nil {
 		// Passwords don't match
 		return nil, models.ErrInvalidCredentials
 	}
 
-	// 3. Use helper function to generate JWT and AuthResponse
+	// 3. Check if the user is active
+	if !userWithHash.IsActive {
+		return nil, models.ErrInactiveAccount
+	}
+
+	// 4. Use helper function to generate JWT and AuthResponse
 	return s.generateAuthResponse(userWithHash)
 }
 
@@ -244,7 +255,7 @@ func (s *Service) ResendActivationEmail(ctx context.Context, email string) error
 		return nil
 	}
 
-	emailSubject := "Activate Your Account (New Link)"
+	emailSubject := "[Circuit] Activate Your Account (New Link)"
 	plainTextContent := fmt.Sprintf("Please click the following link in 30 minutes to activate your account: %s", activationURL)
 
 	go func() {
@@ -273,6 +284,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 		return err
 	}
 	expiresAt := time.Now().Add(15 * time.Minute) // token is valid for 15 minutes
+	log.Println("GENERATE RESET PASSWORD TOKEN: ", token)
 
 	// 3. Save token and expiry to user record
 	if err := s.userRepo.SetPasswordResetToken(ctx, user.ID, token, expiresAt); err != nil {
@@ -292,7 +304,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 		return nil
 	}
 
-	emailSubject := "Reset Your Password"
+	emailSubject := "[Circuit] Reset Your Password"
 	plainTextContent := fmt.Sprintf("Please click the following link in 15 minutes to reset your password: %s", resetURL)
 
 	go func() {
@@ -311,7 +323,10 @@ func (s *Service) ResetPassword(ctx context.Context, token string, newPassword s
 	// Read and Security Check: verify the token matches AND has not expired
 	user, err := s.userRepo.FindByPasswordResetToken(ctx, token)
 	if err != nil {
-		return nil, models.ErrInvalidToken // Token not found or expired
+		if errors.Is(err, models.ErrInvalidToken) {
+			return nil, models.ErrInvalidToken // Token not found or expired
+		}
+		return nil, fmt.Errorf("service.ResetPassword.FindToken: %w", err)
 	}
 
 	// 2. Hash the new password
@@ -382,7 +397,7 @@ func (s *Service) HandleGoogleCallback(ctx context.Context, code string) (*model
 		newUser := &models.User{
 			Nickname:       userInfo.Name,
 			Email:          userInfo.Email,
-			AvatarURL:      userInfo.Picture,
+			AvatarURL:      &userInfo.Picture,
 			AuthProvider:   "google",
 			AuthProviderID: userInfo.ID,
 			IsActive:       true,

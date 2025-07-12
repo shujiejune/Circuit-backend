@@ -9,6 +9,9 @@ var (
 	// ErrForbidden is returned when access is denied to a resource.
 	ErrForbidden = errors.New("access denied")
 
+	// ErrInactiveAccount is returned when an inactive user tries to log in.
+	ErrInactiveAccount = errors.New("user account is not active")
+
 	// ErrInvalidToken is returned when a token is invalid or expired.
 	ErrInvalidToken = errors.New("invalid or expired token")
 
