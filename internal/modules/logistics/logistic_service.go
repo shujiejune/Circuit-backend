@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 
 	"dispatch-and-delivery/internal/models"
@@ -69,81 +70,106 @@ func (s *service) SetMachineStatus(ctx context.Context, machineID string, req mo
 
 // AssignOrder 为订单分配一台空闲机器并更新数据库
 func (s *service) AssignOrder(ctx context.Context, orderID string) (*models.Machine, error) {
-	machines, err := s.logisticRepo.ListIdleMachines(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(machines) == 0 {
-		return nil, fmt.Errorf("no idle machines available")
-	}
-	m := machines[0]
-	if err := s.logisticRepo.AssignOrder(ctx, orderID, m.ID); err != nil {
-		return nil, err
-	}
-	if err := s.logisticRepo.UpdateMachineStatus(ctx, m.ID, models.StatusInTransit); err != nil {
-		return nil, err
-	}
-	m.Status = models.StatusInTransit
-	return m, nil
+    machines, err := s.logisticRepo.ListIdleMachines(ctx)
+    if err != nil {
+        return nil, err
+    }
+    if len(machines) == 0 {
+        return nil, fmt.Errorf("no idle machines available")
+    }
+
+    // 确保选择具有确定性：按 ID 升序排序
+    sort.Slice(machines, func(i, j int) bool {
+        return machines[i].ID < machines[j].ID
+    })
+
+    m := machines[0]
+    if err := s.logisticRepo.AssignOrder(ctx, orderID, m.ID); err != nil {
+        return nil, err
+    }
+    if err := s.logisticRepo.UpdateMachineStatus(ctx, m.ID, models.StatusInTransit); err != nil {
+        return nil, err
+    }
+    m.Status = models.StatusInTransit
+    return m, nil
 }
 
-// CalculateRouteOptions 调用地图 API 并计算两种报价
+
+// CalculateRouteOptions 调用地图 API 并计算两种报价，同时保存对应路线
 func (s *service) CalculateRouteOptions(ctx context.Context, req models.RouteRequest) ([]models.RouteOption, error) {
-	// 调用 Google Maps
-	pickup := req.PickupLocation.StreetAddress
-	dropoff := req.DeliveryLocation.StreetAddress
-	dMeters, dSeconds, polyline, err := s.callGoogleMaps(ctx, pickup, dropoff)
-	if err != nil {
-		return nil, fmt.Errorf("CalculateRouteOptions: maps API: %w", err)
-	}
-	// 高峰判断
-	peak := isPeakHour(req.RequestedTime)
+    // 调用 Google Maps
+    pickup := req.PickupLocation.StreetAddress
+    dropoff := req.DeliveryLocation.StreetAddress
+    dMeters, dSeconds, polyline, err := s.callGoogleMaps(ctx, pickup, dropoff)
+    if err != nil {
+        return nil, fmt.Errorf("CalculateRouteOptions: maps API: %w", err)
+    }
+    // 高峰判断
+    peak := isPeakHour(req.RequestedTime)
 
-	if req.WeightKG > robotMaxWeightKG ||
-		req.Dimensions.Length > robotMaxDimM ||
-		req.Dimensions.Width > robotMaxDimM ||
-		req.Dimensions.Height > robotMaxDimM {
-		return nil, models.ErrPackageTooLarge
-	}
+    if req.WeightKG > robotMaxWeightKG ||
+        req.Dimensions.Length > robotMaxDimM ||
+        req.Dimensions.Width > robotMaxDimM ||
+        req.Dimensions.Height > robotMaxDimM {
+        return nil, models.ErrPackageTooLarge
+    }
 
-	useDrone := req.WeightKG <= droneMaxWeightKG &&
-		req.Dimensions.Length <= droneMaxDimM &&
-		req.Dimensions.Width <= droneMaxDimM &&
-		req.Dimensions.Height <= droneMaxDimM
+    useDrone := req.WeightKG <= droneMaxWeightKG &&
+        req.Dimensions.Length <= droneMaxDimM &&
+        req.Dimensions.Width <= droneMaxDimM &&
+        req.Dimensions.Height <= droneMaxDimM
 
-	// “最快” 使用 DRONE
-	fastest := models.RouteOption{
-		ID:               uuid.NewString(),
-		PickupLocation:   req.PickupLocation,
-		DeliveryLocation: req.DeliveryLocation,
-		Polyline:         polyline,
-		DistanceMeters:   dMeters,
-		DurationSeconds:  dSeconds,
-		Strategy:         models.FastestStrategy,
-		EstimatedCost:    computeCost(dMeters, dSeconds, models.MachineTypeDrone, peak),
-		MachineType:      models.MachineTypeDrone,
-	}
+    // “最快” 使用 DRONE
+    fastest := models.RouteOption{
+        ID:               uuid.NewString(),
+        PickupLocation:   req.PickupLocation,
+        DeliveryLocation: req.DeliveryLocation,
+        Polyline:         polyline,
+        DistanceMeters:   dMeters,
+        DurationSeconds:  dSeconds,
+        Strategy:         models.FastestStrategy,
+        EstimatedCost:    computeCost(dMeters, dSeconds, models.MachineTypeDrone, peak),
+        MachineType:      models.MachineTypeDrone,
+    }
 
-	//  “最便宜” 使用 ROBOT
-	cheapest := models.RouteOption{
-		ID:               uuid.NewString(),
-		PickupLocation:   req.PickupLocation,
-		DeliveryLocation: req.DeliveryLocation,
-		Polyline:         polyline,
-		DistanceMeters:   dMeters,
-		DurationSeconds:  int(math.Ceil(float64(dSeconds) * 2)), // 假设地面速度为飞行一半
-		Strategy:         models.CheapestStrategy,
-		EstimatedCost:    computeCost(dMeters, dSeconds, models.MachineTypeRobot, peak),
-		MachineType:      models.MachineTypeRobot,
-	}
+    // “最便宜” 使用 ROBOT
+    cheapest := models.RouteOption{
+        ID:               uuid.NewString(),
+        PickupLocation:   req.PickupLocation,
+        DeliveryLocation: req.DeliveryLocation,
+        Polyline:         polyline,
+        DistanceMeters:   dMeters,
+        DurationSeconds:  int(math.Ceil(float64(dSeconds) * 2)), // 假设地面速度为飞行一半
+        Strategy:         models.CheapestStrategy,
+        EstimatedCost:    computeCost(dMeters, dSeconds, models.MachineTypeRobot, peak),
+        MachineType:      models.MachineTypeRobot,
+    }
 
-	options := []models.RouteOption{}
-	if useDrone {
-		options = append(options, fastest)
-	}
-	options = append(options, cheapest)
-	return options, nil
+    options := []models.RouteOption{}
+
+    if useDrone {
+        options = append(options, fastest)
+        // 保存 fastest 路线
+        _ = s.logisticRepo.SaveRoute(ctx, &models.Route{
+            OrderID:         "", // 这里因为报价阶段不确定 orderID，可设为空或 req 内有 orderID 再填
+            Polyline:        fastest.Polyline,
+            DistanceMeters:  fastest.DistanceMeters,
+            DurationSeconds: fastest.DurationSeconds,
+        })
+    }
+
+    options = append(options, cheapest)
+    // 保存 cheapest 路线
+    _ = s.logisticRepo.SaveRoute(ctx, &models.Route{
+        OrderID:         "",
+        Polyline:        cheapest.Polyline,
+        DistanceMeters:  cheapest.DistanceMeters,
+        DurationSeconds: cheapest.DurationSeconds,
+    })
+
+    return options, nil
 }
+
 
 // ComputeRoute 生成并持久化实际路线
 func (s *service) ComputeRoute(ctx context.Context, orderID string) (*models.Route, error) {
@@ -225,24 +251,23 @@ func (s *service) callGoogleMaps(ctx context.Context, origin, destination string
 //  2. 高峰期乘以 peakMultiplier
 //  3. 根据机器类型(drone/robot)应用不同 base/perKm
 func computeCost(distanceMeters, durationSeconds int, machineType string, peak bool) float64 {
-	// 1) 转换距离为公里
-	km := float64(distanceMeters) / 1000.0
-	// 2) 机器类型参数
-	var base, perKm float64
-	switch machineType {
-	case models.MachineTypeDrone:
-		base, perKm = 2.0, 0.5 // Drone 起步价和单位公里费
-	default:
-		base, perKm = 1.0, 0.3 // Robot 起步价和单位公里费
-	}
-	price := base + perKm*km // 3) 计算初始价格
-	// 4) 高峰期加价20%
-	if peak {
-		price *= 1.2
-	}
-	// 5) 保留两位小数
-	return math.Round(price*100) / 100
+    km := float64(distanceMeters) / 1000.0
+    var base, perKm float64
+    switch machineType {
+    case models.MachineTypeDrone:
+        base, perKm = 2.0, 0.5
+    default:
+        base, perKm = 1.0, 0.3
+    }
+    if peak {
+        base *= 1.2
+        perKm = 0 
+    }
+    price := base + perKm*km
+    return math.Round(price*100) / 100
 }
+
+
 
 // isPeakHour 判断给定时间是否属于高峰期
 // 支持传入请求时间，当为零值时使用当前时间
