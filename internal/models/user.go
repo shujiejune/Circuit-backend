@@ -7,8 +7,8 @@ type User struct {
 	ID             string    `json:"id" db:"id"` // UUID string from DB
 	Nickname       string    `json:"nickname,omitempty" db:"nickname"`
 	Email          string    `json:"email" db:"email"`
-	PasswordHash   string    `json:"-" db:"password_hash"`
-	AvatarURL      string    `json:"avatar_url,omitempty" db:"avatar_url"`
+	PasswordHash   *string   `json:"-" db:"password_hash"`
+	AvatarURL      *string   `json:"avatar_url,omitempty" db:"avatar_url"`
 	AuthProvider   string    `json:"auth_provider" db:"auth_provider"`
 	AuthProviderID string    `json:"-" db:"auth_provider_id"`
 	IsActive       bool      `json:"is_active" db:"is_active"`

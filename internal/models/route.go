@@ -7,12 +7,14 @@ const (
 	FastestStrategy  = "FASTEST"
 	CheapestStrategy = "CHEAPEST"
 )
+
 // Dimensions describes the package size in meters.
 type Dimensions struct {
-	Length float64 `json:"length_m"`
-	Width  float64 `json:"width_m"`
-	Height float64 `json:"height_m"`
+	Length float64 `json:"length_m" validate:"required,gt=0"`
+	Width  float64 `json:"width_m" validate:"required,gt=0"`
+	Height float64 `json:"height_m" validate:"required,gt=0"`
 }
+
 // RouteRequest is the input from the user to get route options.
 type RouteRequest struct {
 	// When provided, PickupLocation and DeliveryLocation can be omitted and
@@ -27,9 +29,9 @@ type RouteRequest struct {
 
 // RouteOption represents a single routing option with a price and estimated duration.
 type RouteOption struct {
-	ID               string `json:"id"`
-	Pickup            Address       `json:"pickup"`
-	Delivery          Address       `json:"delivery"`
+	ID                string        `json:"id"`
+	PickupLocation    Address       `json:"pickup_location"`
+	DeliveryLocation  Address       `json:"delivery_location"`
 	Price             float64       `json:"price"`
 	EstimatedDuration time.Duration `json:"estimated_duration"`
 	Polyline          string        `json:"polyline,omitempty"`
@@ -38,7 +40,7 @@ type RouteOption struct {
 	Strategy          string        `json:"strategy,omitempty"`
 	EstimatedCost     float64       `json:"estimated_cost,omitempty"`
 	MachineType       string        `json:"machine_type,omitempty"`
-} 
+}
 
 // Route represents a persisted route calculated for an order.
 type Route struct {

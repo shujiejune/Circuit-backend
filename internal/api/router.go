@@ -72,10 +72,10 @@ func SetupRoutes(
 	{
 		logisticsGroup.GET("/fleet", logisticsHandler.GetFleet)
 		logisticsGroup.PUT("/fleet/:machineId/status", logisticsHandler.SetMachineStatus)
-		logisticsGroup.POST("/quote", logisticsHandler.CalculateQuote)
+		logisticsGroup.POST("/orders/quote", logisticsHandler.CalculateQuote)
 		logisticsGroup.POST("/orders/:orderId/route", logisticsHandler.ComputeRoute)
 		logisticsGroup.POST("/orders/:orderId/assign", logisticsHandler.ReassignOrder)
 		logisticsGroup.POST("/orders/:orderId/track", logisticsHandler.ReportTracking)
-		logisticsGroup.GET("/orders/:orderId/track", logisticsHandler.GetTracking)
+		logisticsGroup.GET("orders/:orderId/track", logisticsHandler.GetTracking)
 	}
 }
