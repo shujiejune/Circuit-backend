@@ -1,7 +1,7 @@
 -- This script seeds the database with initial data for development and testing.
 
 -- Seed Users
-INSERT INTO users (id, name, email, password_hash) VALUES
+INSERT INTO users (id, nickname, email, password_hash) VALUES
 ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Alice', 'alice@example.com', '$2a$10$hTyELZ8pkgk8xPNmvVz8WOFh5.b4RyjIqKHzJg1F3Xg1ZwHPDAJgO')
 ON CONFLICT (email) DO NOTHING;
 
@@ -18,7 +18,7 @@ INSERT INTO machines (id, type, status, current_location, battery_level) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed a completed order for Alice to populate history
-INSERT INTO orders (id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_description, item_weight_kg, cost)
+INSERT INTO orders (id, user_id, machine_id, pickup_address_id, dropoff_address_id, status, item_length_cm, item_width_cm, item_height_cm, item_weight_kg, cost)
 SELECT
     'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
     u.id,
@@ -26,7 +26,9 @@ SELECT
     a_pickup.id,
     a_dropoff.id,
     'DELIVERED',
-    'Fried Chicken',
+    20,
+    50,
+    60,
     0.5,
     4.50
 FROM
